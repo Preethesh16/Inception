@@ -75,3 +75,26 @@ def test_explicit_live_inference_bypasses_cache(client):
     result = client.post("/analysis-runs", headers=headers(), json={"force": True})
     assert result.status_code == 202
     assert result.json()["force"] is True
+
+
+def test_network_map_shares_risk_levels_without_private_details(client, store, monkeypatch):
+    def calculated_risk(state, forecast):
+        fid = forecast["facility_id"]
+        return {
+            "facility_id": fid,
+            "supply_id": forecast["supply_id"],
+            "before_replenishment": fid == "A",
+            "stockout_days": 1 if fid == "A" else None,
+            "stress_stockout_days": 10 if fid == "B" else None,
+        }
+    monkeypatch.setattr(api, "risk_for", calculated_risk)
+    result = client.get("/snapshot", headers=headers()).json()
+    assert result["network_status"]["A"] == "high"
+    assert result["network_status"]["B"] == "moderate"
+    assert result["network_status"]["D"] == "adequate"
+    assert all(r["facility_id"] == "A" for r in result["risks"])
+    assert all(r["facility_id"] == "A" for r in result["inventory"])
+    with store.transaction() as state:
+        state["forecasts"] = {k: v for k, v in state["forecasts"].items() if v["facility_id"] != "D"}
+    result = client.get("/snapshot", headers=headers()).json()
+    assert result["network_status"]["D"] == "unknown"

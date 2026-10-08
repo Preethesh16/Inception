@@ -256,14 +256,16 @@ class MascotBoundary extends Component<
 export default function CareMascot({
   onOpenLogin,
   context = "home",
+  guidance,
 }: {
-  onOpenLogin: () => void;
-  context?: "home" | "login";
+  onOpenLogin?: () => void;
+  context?: "home" | "login" | "dashboard";
+  guidance?: { title: string; text: string };
 }) {
   const [reduced, setReduced] = useState(
     () => matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  const [landed, setLanded] = useState(reduced || context === "login");
+  const [landed, setLanded] = useState(reduced || context !== "home");
   const [open, setOpen] = useState(true);
   const [hidden, setHidden] = useState(document.hidden);
   useEffect(() => {
@@ -298,17 +300,21 @@ export default function CareMascot({
             <X size={16} />
           </button>
           <span className="mascot-eyebrow">
-            {context === "login"
-              ? "LET’S GET YOU SIGNED IN"
-              : "YOUR FLYING FOX"}
+            {context === "dashboard"
+              ? "YOUR HOSPITAL GUIDE"
+              : context === "login"
+                ? "LET’S GET YOU SIGNED IN"
+                : "YOUR FLYING FOX"}
           </span>
           <h2>
-            {context === "login" ? "I’ll help you sign in." : "Hi, I’m Pip!"}
+            {guidance?.title ??
+              (context === "login" ? "I’ll help you sign in." : "Hi, I’m Pip!")}
           </h2>
           <p>
-            {context === "login"
-              ? "Enter your hospital’s email and password, then select Log in. Your account opens the matching hospital dashboard. You can use the eye icon to check your password."
-              : "I’m your flying fox guide to Inception. We help hospitals forecast supply needs, spot shortages, and coordinate safe transfers."}
+            {guidance?.text ??
+              (context === "login"
+                ? "Enter your hospital’s email and password, then select Log in. Your account opens the matching hospital dashboard. You can use the eye icon to check your password."
+                : "I’m your flying fox guide to Inception. We help hospitals forecast supply needs, spot shortages, and coordinate safe transfers.")}
           </p>
           {context === "home" && (
             <a
@@ -316,7 +322,7 @@ export default function CareMascot({
               onClick={(event) => {
                 event.preventDefault();
                 setOpen(false);
-                onOpenLogin();
+                onOpenLogin?.();
               }}
             >
               Let’s meet your hospital <span aria-hidden="true">↗</span>
@@ -350,8 +356,14 @@ export default function CareMascot({
       {landed && (
         <button
           className="mascot-hit-target"
-          onClick={() => setOpen(true)}
-          aria-label="Open Pip introduction"
+          onClick={() => setOpen((value) => !value)}
+          aria-label={
+            context === "dashboard"
+              ? open
+                ? "Dismiss Pip explanation"
+                : "Show Pip explanation"
+              : "Open Pip introduction"
+          }
           aria-expanded={open}
           aria-controls={open ? "pip-introduction" : undefined}
         />

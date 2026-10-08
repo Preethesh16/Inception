@@ -184,6 +184,7 @@ export type Snapshot = {
     latest_run: string | null;
   };
   facilities: Facility[];
+  network_status?: Record<string, "high" | "moderate" | "adequate" | "unknown">;
   supplies: Supply[];
   inventory: Batch[];
   risks: Risk[];
@@ -202,6 +203,8 @@ export type Snapshot = {
     confirmed: boolean;
   }[];
   movements: {
+    supply_id?: string;
+    recorded_at?: string;
     id: string;
     kind: string;
     quantity: number;

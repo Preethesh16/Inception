@@ -82,11 +82,10 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     await p
       .getByRole("button", { name: "Report outbreak", exact: true })
       .click();
-    await p.getByLabel("Additional ORS units").fill("140");
+    await p.getByLabel("Product", { exact: true }).selectOption("ORS");
     await p
-      .getByLabel("Operational observations")
-      .fill("Nearby operational outbreak signal for the demo.");
-    await p.getByRole("button", { name: "Submit report & reassess" }).click();
+      .getByRole("button", { name: "Report demand surge", exact: true })
+      .click();
     await expect(p.getByRole("dialog")).toHaveCount(0);
   }
   s = await waitAnalysis(request);

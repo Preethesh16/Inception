@@ -29,6 +29,13 @@ import type { Snapshot, Batch, Negotiation, Message } from "./lib/types";
 import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
+import { CsvUpload } from "./components/CsvUpload";
+import { UsageExplorer, type UsageGuidance } from "./components/UsageExplorer";
+import { InventoryExplorer } from "./components/InventoryExplorer";
+import { AuditExplorer } from "./components/AuditExplorer";
+import { NearbyHospitals } from "./components/NearbyHospitals";
+import type { ImportProgress } from "./components/DashboardPip";
+const DashboardPip = lazy(() => import("./components/DashboardPip"));
 const HospitalNetwork = lazy(() => import("./components/HospitalNetwork"));
 const CareMascot = lazy(() => import("./components/CareMascot"));
 const LoginScene = lazy(() => import("./components/LoginScene"));
@@ -443,6 +450,14 @@ const nav = [
   ["Approvals", CheckCircle2],
 ] as const;
 export default function TrioApp() {
+  const [usageGuidance, setUsageGuidance] = useState<UsageGuidance>();
+  const [inventoryGuidance, setInventoryGuidance] = useState<UsageGuidance>();
+  const [importProgress, setImportProgress] = useState<ImportProgress>({
+    busy: false,
+    imported: false,
+    error: "",
+    records: 0,
+  });
   const consoleMode =
     window.location.port === "5174" ||
     new URLSearchParams(location.search).get("view") === "console";
@@ -533,9 +548,6 @@ export default function TrioApp() {
     }
   }
   const data = sessionExpired ? undefined : q.data;
-  const running = data?.jobs.findLast((j) =>
-    ["queued", "running"].includes(j.status),
-  );
   return (
     <div className="app-shell trio-shell">
       <aside className="sidebar">
@@ -597,10 +609,9 @@ export default function TrioApp() {
       <main className="trio-main">
         <header className="trio-header">
           <div>
-            <span className="eyebrow">
-              INCEPTION /{" "}
-              {consoleMode ? "LIVE WORKFLOW" : actor + " · HOSPITAL ADMIN"}
-            </span>
+            {consoleMode && (
+              <span className="eyebrow">INCEPTION / LIVE WORKFLOW</span>
+            )}
             <h1>
               {consoleMode
                 ? "Every decision, visible."
@@ -610,19 +621,19 @@ export default function TrioApp() {
             </h1>
           </div>
           {!consoleMode && (
-            <Button variant="ghost" disabled={busy} onClick={logoutHospital}>
-              <LogOut size={15} />
-              Log out
-            </Button>
-          )}
-          {!consoleMode && (
             <Button
-              variant="outline"
+              variant="danger"
               disabled={!data?.supplies.length}
               onClick={() => setReport(true)}
             >
               <AlertTriangle size={15} />
               Report outbreak
+            </Button>
+          )}
+          {!consoleMode && (
+            <Button variant="ghost" disabled={busy} onClick={logoutHospital}>
+              <LogOut size={15} />
+              Log out
             </Button>
           )}
         </header>
@@ -635,40 +646,42 @@ export default function TrioApp() {
           <p>Connecting to the inventory ledger…</p>
         ) : (
           <>
-            {!consoleMode && (
-              <div className="trio-status">
-                <Badge tone={running ? "amber" : "green"}>
-                  {!data.supplies.length
-                    ? "Awaiting CSV"
-                    : running
-                      ? "Analysis " + running.status
-                      : "Connected"}
-                </Badge>
-                <span>
-                  Scenario date {date(data.demo.as_of)} · refresh every 5
-                  minutes
-                </span>
-              </div>
-            )}
             {consoleMode ? (
               <Operations data={data} act={act} busy={busy} />
             ) : (
               <>
                 {tab === "Onboarding" && (
                   <>
-                    <SingleImport actor={actor} data={data} />
+                    <SingleImport
+                      actor={actor}
+                      data={data}
+                      onProgress={setImportProgress}
+                    />
+                    <Card
+                      title="Nearby hospitals"
+                      sub="Live supply-risk overview across your hospital network."
+                    >
+                      <NearbyHospitals data={data} />
+                    </Card>
                   </>
                 )}
                 {tab === "Inventory management" && (
                   <>
-                    <Manage data={data} act={act} busy={busy} />
+                    <Manage
+                      data={data}
+                      act={act}
+                      busy={busy}
+                      onExplain={setInventoryGuidance}
+                    />
                     <details>
                       <summary>Forecast-based inventory summary</summary>
                       <Inventory data={data} />
                     </details>
                   </>
                 )}{" "}
-                {tab === "Past usage" && <Records data={data} actor={actor} />}{" "}
+                {tab === "Past usage" && (
+                  <Records data={data} onExplain={setUsageGuidance} />
+                )}{" "}
                 {tab === "Approvals" && (
                   <>
                     <Approvals
@@ -698,10 +711,29 @@ export default function TrioApp() {
           </>
         )}
       </main>
+      {!consoleMode && data && !report && (
+        <Suspense fallback={null}>
+          <DashboardPip
+            data={data}
+            tab={tab}
+            progress={importProgress}
+            usageGuidance={usageGuidance}
+            inventoryGuidance={inventoryGuidance}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
-function SingleImport({ actor, data }: { actor: string; data: Snapshot }) {
+function SingleImport({
+  actor,
+  data,
+  onProgress,
+}: {
+  actor: string;
+  data: Snapshot;
+  onProgress: (progress: ImportProgress) => void;
+}) {
   const q = useQuery({
     queryKey: ["guide", actor],
     queryFn: () =>
@@ -715,8 +747,18 @@ function SingleImport({ actor, data }: { actor: string; data: Snapshot }) {
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
   const hospital = q.data?.hospitals.find((h) => h.id === actor);
+  const showImported = !!hospital?.onboarded && !busy;
+  useEffect(() => {
+    onProgress({
+      busy,
+      imported: showImported,
+      error,
+      records: hospital?.history_rows || 0,
+    });
+  }, [busy, showImported, error, hospital?.history_rows, onProgress]);
   async function upload() {
-    if (!file) return;
+    if (!file || busy) return;
+    const startedAt = performance.now();
     setBusy(true);
     setError("");
     try {
@@ -724,6 +766,13 @@ function SingleImport({ actor, data }: { actor: string; data: Snapshot }) {
       body.append("file", file);
       await api("/onboarding/csv", actor, { method: "POST", body });
       await qc.invalidateQueries();
+      // Keep the presentation visible without delaying the backend import.
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.max(0, 3500 - (performance.now() - startedAt)),
+        ),
+      );
     } catch (e) {
       setError(String(e));
     } finally {
@@ -733,40 +782,32 @@ function SingleImport({ actor, data }: { actor: string; data: Snapshot }) {
   return (
     <Card
       title={
-        hospital?.onboarded
+        showImported
           ? "Hospital data connected"
           : "Start with your hospital CSV"
       }
       sub={
-        hospital?.onboarded
-          ? `${hospital.history_rows} consumption records imported. Your inventory and scheduled deliveries are connected. Use Inventory management to update quantities or expiry dates.`
+        showImported
+          ? `${hospital?.history_rows} consumption records imported. Your inventory and scheduled deliveries are connected. Use Inventory management to update quantities or expiry dates.`
           : "One file contains the hospital profile, supply definitions, inventory batches, consumption history and scheduled replenishments. All rows are validated together."
       }
     >
-      {!hospital?.onboarded && (
-        <div className="single-import">
-          <a
-            className="button button-outline"
-            href={fileUrl("/onboarding/template/" + actor, actor)}
-          >
-            <Download size={16} />
-            Download hospital CSV
-          </a>
-          <label>
-            Hospital CSV
-            <input
-              aria-label="Hospital CSV"
-              type="file"
-              accept=".csv"
-              onChange={(e) => setFile(e.target.files?.[0])}
-            />
-          </label>
-          <Button disabled={!file || busy} onClick={upload}>
-            <Upload size={16} />
-            {busy ? "Validating…" : "Import hospital"}
-          </Button>
-        </div>
-      )}
+      <CsvUpload
+        file={file}
+        busy={busy}
+        imported={showImported}
+        records={hospital?.history_rows || 0}
+        templateUrl={fileUrl("/onboarding/template/" + actor, actor)}
+        onSelect={(next) => {
+          setFile(next);
+          setError("");
+        }}
+        onError={(message) => {
+          setFile(undefined);
+          setError(message);
+        }}
+        onImport={upload}
+      />
       {error && (
         <p role="alert" className="text-red">
           {error}
@@ -832,62 +873,29 @@ function Manage({
   data,
   act,
   busy,
+  onExplain,
 }: {
   data: Snapshot;
   act: (p: string, b: unknown) => Promise<boolean>;
   busy: boolean;
+  onExplain: (value: UsageGuidance) => void;
 }) {
   const [editing, setEditing] = useState<Batch | null>(null);
   const [qty, setQty] = useState(0);
   const [expiry, setExpiry] = useState("");
   const [reason, setReason] = useState("Demo inventory correction");
   return (
-    <Card
-      title="Edit batch quantities and expiry"
-      sub="Changes are recorded in the ledger and trigger reassessment. Reducing stock changes coverage, not historical demand. Reserved batches cannot be edited."
-    >
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Supply / lot</th>
-              <th>On hand</th>
-              <th>Expires</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.inventory.map((b) => (
-              <tr key={b.id}>
-                <td>
-                  <strong>
-                    {data.supplies.find((s) => s.id === b.supply_id)?.name}
-                  </strong>
-                  <small>{b.lot}</small>
-                </td>
-                <td>
-                  {b.quantity} <small>{b.reserved} reserved</small>
-                </td>
-                <td>{date(b.expires_at)}</td>
-                <td>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!!b.reserved}
-                    onClick={() => {
-                      setEditing(b);
-                      setQty(b.quantity);
-                      setExpiry(b.expires_at.slice(0, 10));
-                    }}
-                  >
-                    Edit {b.id}
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <>
+      <InventoryExplorer
+        data={data}
+        busy={busy}
+        onExplain={onExplain}
+        onEdit={(batch) => {
+          setEditing(batch);
+          setQty(batch.quantity);
+          setExpiry(batch.expires_at.slice(0, 10));
+        }}
+      />
       {editing && (
         <div className="trio-modal-backdrop">
           <section
@@ -963,79 +971,62 @@ function Manage({
           </section>
         </div>
       )}
-    </Card>
-  );
-}
-function Records({ data, actor }: { data: Snapshot; actor: string }) {
-  return (
-    <>
-      <Card
-        title="Historical consumption"
-        sub="Imported history feeds demand forecasts; inventory corrections are separate audit movements."
-      >
-        <div className="file-downloads">
-          <a href={exportUrl("observations", actor)}>
-            Download consumption history
-          </a>
-          <a href={exportUrl("movements", actor)}>Download movements</a>
-          <a href={exportUrl("forecasts", actor)}>Download forecasts</a>
-        </div>
-        {data.forecasts.map((f) => (
-          <details key={f.id}>
-            <summary>
-              {data.supplies.find((s) => s.id === f.supply_id)?.name} · last{" "}
-              {f.history.length} observed days
-            </summary>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Consumed units</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {f.history.map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.date}</td>
-                      <td>{r.quantity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        ))}
-      </Card>
-      <Card title="Inventory audit trail">
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Batch</th>
-                <th>Movement</th>
-                <th>Units</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...data.movements].reverse().map((m) => (
-                <tr key={m.id}>
-                  <td>{new Date(m.at).toLocaleString()}</td>
-                  <td>{m.batch_id}</td>
-                  <td>{m.kind}</td>
-                  <td>{m.quantity}</td>
-                  <td>{m.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </>
   );
 }
+function Records({
+  data,
+  onExplain,
+}: {
+  data: Snapshot;
+  onExplain: (value: UsageGuidance) => void;
+}) {
+  const [usage, setUsage] = useState<UsageGuidance>();
+  const [audit, setAudit] = useState<UsageGuidance>();
+  const [active, setActive] = useState("usage");
+  const auditRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = auditRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) =>
+        setActive(
+          entry.isIntersecting || element.contains(document.activeElement)
+            ? "audit"
+            : "usage",
+        ),
+      { rootMargin: "0px 0px -40% 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const guidance = active === "audit" ? audit : usage;
+    if (guidance) onExplain(guidance);
+  }, [active, audit, usage, onExplain]);
+  return (
+    <>
+      <section
+        className="trio-card usage-card"
+        aria-label="Historical consumption"
+        onPointerDownCapture={() => setActive("usage")}
+        onFocusCapture={() => setActive("usage")}
+      >
+        <UsageExplorer data={data} onExplain={setUsage} />
+      </section>
+      <div
+        ref={auditRef}
+        onPointerDownCapture={() => setActive("audit")}
+        onFocusCapture={() => setActive("audit")}
+      >
+        <Card title="Inventory journey">
+          <AuditExplorer data={data} onExplain={setAudit} />
+        </Card>
+      </div>
+    </>
+  );
+}
+
 function ReportForm({
   data,
   act,
@@ -1047,111 +1038,83 @@ function ReportForm({
   busy: boolean;
   close: () => void;
 }) {
-  const [selected, setSelected] = useState<string[]>(["ORS"]);
-  const [requirements, setRequirements] = useState<Record<string, string>>({});
-  const [note, setNote] = useState("");
-  const [category, setCategory] = useState("Suspected demand surge");
+  const [selected, setSelected] = useState(data.supplies[0]?.id || "");
   return (
     <div className="trio-modal-backdrop">
       <section
-        className="trio-modal"
+        className="trio-modal demand-surge-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Report outbreak"
+        aria-labelledby="demand-surge-title"
       >
-        <h2>Report suspected outbreak</h2>
-        <p>
-          Choose affected supplies and any extra units needed over seven days. A
-          report is operational evidence, not a confirmed diagnosis.
-        </p>
+        <h2 id="demand-surge-title">Report demand surge</h2>
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            const additional_units = Object.fromEntries(
-              selected
-                .filter((s) => requirements[s])
-                .map((s) => [s, Number(requirements[s])]),
-            );
+            if (busy || !selected) return;
             if (
               await act("/outbreak-reports", {
                 onset_at: data.demo.as_of,
-                category,
-                supply_ids: selected,
-                additional_units,
-                note,
+                category: "Suspected demand surge",
+                supply_ids: [selected],
+                additional_units: {},
+                note: "",
               })
             )
               close();
           }}
         >
           <label>
-            Incident category
-            <input
+            Product
+            <select
+              aria-label="Product"
               required
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-          </label>
-          {data.supplies.map((s) => (
-            <div className="outbreak-supply" key={s.id}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selected.includes(s.id)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.target.checked
-                        ? [...selected, s.id]
-                        : selected.filter((x) => x !== s.id),
-                    )
-                  }
-                />
-                {s.name}
-              </label>
-              {selected.includes(s.id) && (
-                <label>
-                  Additional {s.unit}s over 7 days
-                  <input
-                    aria-label={"Additional " + s.id + " units"}
-                    type="number"
-                    min="0"
-                    max="1000000"
-                    step="1"
-                    value={requirements[s.id] || ""}
-                    placeholder="Optional — no invented multiplier"
-                    onChange={(e) =>
-                      setRequirements({
-                        ...requirements,
-                        [s.id]: e.target.value,
-                      })
-                    }
-                  />
-                </label>
-              )}
-            </div>
-          ))}
-          <label>
-            Operational observations
-            <textarea
-              aria-label="Operational observations"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={1000}
-            />
+              value={selected}
+              disabled={busy}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              <option value="" disabled>
+                Select a product
+              </option>
+              {data.supplies.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </label>
           <div className="trio-actions">
-            <Button disabled={busy || !selected.length}>
-              Submit report & reassess
+            <Button disabled={busy || !selected} variant="danger">
+              {busy ? "Reporting…" : "Report demand surge"}
             </Button>
-            <Button variant="outline" type="button" onClick={close}>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={busy}
+              onClick={close}
+            >
               Cancel
             </Button>
           </div>
         </form>
+        <Suspense fallback={null}>
+          <CareMascot
+            context="dashboard"
+            guidance={{
+              title: busy
+                ? "I’m reporting the surge."
+                : "Seeing higher demand?",
+              text: busy
+                ? "Your report is being saved and the hospital’s supply risks will be reassessed."
+                : "Choose the product with increased demand, then press Report demand surge. This records a signal and triggers reassessment using your usage history and stock. It won’t invent extra demand quantities or guarantee a transfer.",
+            }}
+          />
+        </Suspense>
       </section>
     </div>
   );
 }
+
 function Approvals({
   data,
   actor,

@@ -123,7 +123,21 @@ def snapshot(who=Depends(actor)):
         for fid in s["facilities"]
     }
     forecasts = scoped(s["forecasts"].values(), who)
-    risks = [risk_for(s, f) for f in forecasts]
+    all_risks = [risk_for(s, f) for f in s["forecasts"].values()]
+    risks = scoped(all_risks, who)
+    network_status = {}
+    for fid in s["facilities"]:
+        expected = set(facility_supplies[fid])
+        local = [r for r in all_risks if r["facility_id"] == fid and r["supply_id"] in expected]
+        if any(r["before_replenishment"] or (r["stockout_days"] is not None and r["stockout_days"] <= 2) for r in local):
+            level = "high"
+        elif any(r["stockout_days"] is not None or r["stress_stockout_days"] is not None for r in local):
+            level = "moderate"
+        elif not expected or expected - {r["supply_id"] for r in local}:
+            level = "unknown"
+        else:
+            level = "adequate"
+        network_status[fid] = level
     rows = negotiations_visible(s, who)
     events = store.recent_events(300)
     visible_events = [e for e in events if who == "judge" or who in e["facilities"]]
@@ -132,6 +146,7 @@ def snapshot(who=Depends(actor)):
         "actor": who,
         "facilities": list(s["facilities"].values()),
         "facility_supplies": facility_supplies,
+        "network_status": network_status,
         "supplies": [
             v for k, v in s["supplies"].items() if who == "judge" or k in facility_supplies.get(who, [])
         ],
