@@ -261,3 +261,32 @@ def test_logout_reset_after_transfer_preserves_partner_stock_and_reconciles(stor
         assert reconciliation(s)["balanced"], reconciliation(s)
         import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
         assert reconciliation(s)["balanced"]
+
+
+def test_two_reports_logout_clears_all_demo_reports_and_rebuilds_without_a(store, monkeypatch):
+    seed_trio(store)
+    monkeypatch.setattr(api, "store", store)
+    client = TestClient(api.app)
+    raw = (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes()
+    client.post("/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw)})
+    for fid in ("A", "B"):
+        response = client.post(
+            "/outbreak-reports",
+            headers={"X-Demo-Session": "demo-" + fid},
+            json={
+                "onset_at": store.read()["settings"]["demo"]["as_of"],
+                "category": "Suspected outbreak",
+                "supply_ids": ["ORS"],
+                "additional_units": {"ORS": 140},
+                "note": "Logout reset regression",
+            },
+        )
+        assert response.status_code == 201
+    run_job(store, enqueue(store))
+    assert in_zone(store.read(), "B", "ORS")
+    response = client.post("/auth/logout", headers={"X-Demo-Session": "demo-A"})
+    assert response.status_code == 200 and response.json()["reports_cleared"] == 2
+    assert not store.read()["reports"] and not store.read()["incidents"]
+    run_job(store, response.json()["job"])
+    assert not in_zone(store.read(), "B", "ORS")
+    assert not any(f["facility_id"] == "A" for f in store.read()["forecasts"].values())

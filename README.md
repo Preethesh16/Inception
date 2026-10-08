@@ -143,3 +143,11 @@ Search is forecast-gated per facility and supply. Pack-sized unmet demand trigge
 ### Agent knowledge and live tests
 
 See [hospital agents and OKF knowledge](docs/agent-knowledge.md) for retrieval, per-hospital/product scoping, policy provenance and the opt-in live API test. `make test` does not use paid API credentials.
+
+### Forecast-aware counteroffers and outbreak reset
+
+The recipient's `evaluate_received_offer` agent tool simulates its own stock, reservations, confirmed arrivals, transit and batch expiry against the current planning forecast. A 200-unit offer is not automatically treated as a 200-unit need. Counteroffers are reduced to useful whole packs; zero useful packs reject the proposal. The negotiation conversation exposes the forecast calculation, expiry and per-batch consumption. A dashboard counteroffer triggers one bounded OpenAI response; deterministic validation works even without the key. Numerical evidence is scoped to the recipient and judge console.
+
+Hospital A logout also clears all outbreak reports in the three-hospital demo, including B's report, so the next onboarding starts without an old outbreak circle. Other hospital logouts clear their own reports while retaining inventory. Report snapshots are archived, old forecasts are invalidated and a new analysis is queued.
+
+Run `.venv/bin/python scripts/test_outbreak_negotiation.py --live` for an isolated real Chronos/OpenAI test: nearby B is selected first, two reports redirect the search to Mandya (internal ID D, the third hospital), an expiring 200-unit offer is evaluated and countered, and logout clears both reports. It writes `artifacts/outbreak-negotiation-live.json` and never changes the active demo database.

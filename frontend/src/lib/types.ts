@@ -72,6 +72,20 @@ export type Forecast = {
   input_hash: string;
 };
 export type Message = {
+  evidence?: {
+    offered_quantity: number;
+    recommended_quantity: number;
+    planning_7_days: number;
+    additional_waste_if_accepted: number;
+    forecast_run_id: string;
+    batches: {
+      batch_id: string;
+      quantity: number;
+      predicted_consumed: number;
+      expires_at: string;
+      arrives_at: string;
+    }[];
+  };
   mode?: string;
   actor: string;
   type: string;

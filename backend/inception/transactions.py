@@ -84,7 +84,45 @@ def counter(state, id, actor, quantity):
                 "text": f"Cannot offer {quantity}. The allocation limit is {n['max_quantity']} units; other recipients and donor coverage are protected. Current offer remains {n['quantity']}.",
             }
         )
-    elif quantity != n["quantity"]:
+    else:
+        from .offer_review import review_offer
+
+        review = review_offer(state, n, quantity)
+        n["recipient_review"] = review
+        safe_quantity = review["recommended_quantity"]
+        n["messages"].append(
+            {
+                "actor": n["recipient"],
+                "type": "forecast review",
+                "at": now(),
+                "quantity": safe_quantity,
+                "evidence": review,
+                "mode": "deterministic forecast tool",
+                "text": f"I checked offer {quantity} against forecast {review.get('forecast_run_id', 'unavailable')}, my stock and confirmed arrivals. "
+                f"I can use {safe_quantity} units in whole packs before expiry without increasing waste. "
+                + (
+                    f"Counteroffer: {safe_quantity} units."
+                    if safe_quantity < quantity
+                    else "The offered quantity fits projected usage."
+                ),
+            }
+        )
+        emit(state, "OFFER_FORECAST_REVIEWED", review, [n["recipient"]], n["run_id"], id)
+        quantity = safe_quantity
+        if quantity == 0:
+            n["status"] = "Rejected"
+            n["approvals"] = []
+            n["version"] += 1
+            emit(
+                state,
+                "PROPOSAL_REJECTED",
+                {"reason": "No useful whole pack before expiry"},
+                [n["donor"], n["recipient"]],
+                n["run_id"],
+                id,
+            )
+            return n
+    if quantity <= n["max_quantity"] and quantity != n["quantity"]:
         n["quantity"] = quantity
         remain, lines = quantity, []
         for line in n["max_lines"]:

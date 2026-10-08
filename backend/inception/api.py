@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import timedelta, datetime
 from typing import Literal
-from fastapi import FastAPI, Depends, Header, Query, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, Depends, Header, Query, HTTPException, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -79,6 +79,10 @@ def negotiations_visible(state, who):
                 row["messages"] = [
                     m for m in row["messages"] if not m.get("briefing_for") or m["briefing_for"] == who
                 ]
+                if who != n["recipient"]:
+                    row.pop("recipient_review", None)
+                    for message in row["messages"]:
+                        message.pop("evidence", None)
             if who != "judge" and who != n["donor"]:
                 row["lines"] = [
                     {
@@ -114,7 +118,8 @@ def snapshot(who=Depends(actor)):
     records = s["settings"].get("onboarding", {}).get("hospitals", {})
     facility_supplies = {
         fid: sorted({b["supply_id"] for b in records.get(fid, {}).get("batches", [])})
-        if demo.get("mode") == "three-hospital" else sorted(s["supplies"])
+        if demo.get("mode") == "three-hospital"
+        else sorted(s["supplies"])
         for fid in s["facilities"]
     }
     forecasts = scoped(s["forecasts"].values(), who)
@@ -127,7 +132,9 @@ def snapshot(who=Depends(actor)):
         "actor": who,
         "facilities": list(s["facilities"].values()),
         "facility_supplies": facility_supplies,
-        "supplies": [v for k, v in s["supplies"].items() if who == "judge" or k in facility_supplies.get(who, [])],
+        "supplies": [
+            v for k, v in s["supplies"].items() if who == "judge" or k in facility_supplies.get(who, [])
+        ],
         "inventory": scoped(s["batches"].values(), who),
         "risks": risks,
         "forecasts": forecasts,
@@ -296,9 +303,15 @@ class Counter(BaseModel):
 
 
 @app.post("/negotiations/{id}/counteroffer")
-def counteroffer(id: str, body: Counter, who=Depends(actor)):
+def counteroffer(id: str, body: Counter, background: BackgroundTasks, who=Depends(actor)):
     with store.transaction() as s:
         result = copy.deepcopy(counter(s, id, who, body.quantity))
+        if who != result["recipient"]:
+            for message in result["messages"]:
+                message.pop("evidence", None)
+    from .agent import explain_counter_response
+
+    background.add_task(explain_counter_response, store, id, who, result["version"])
     return {
         "id": result["id"],
         "quantity": result["quantity"],
@@ -748,13 +761,35 @@ def logout(who=Depends(actor), x_demo_session: str | None = Header(default=None)
 
     with store.transaction() as s:
         reset = who == "A" and s["settings"]["demo"].get("mode") == "three-hospital"
+        reports = {k: r for k, r in s["reports"].items() if reset or r["facility_id"] == who}
+        if reports:
+            s["settings"].setdefault("report_logout_archives", []).append(
+                {"at": now(), "reports": copy.deepcopy(reports)}
+            )
+            for key in reports:
+                del s["reports"][key]
+            s["incidents"] = {}
+            s["forecasts"] = {}
+            s["settings"]["demo"]["latest_run"] = None
+            invalidate(s, "Outbreak reports cleared on logout")
+            emit(
+                s,
+                "OUTBREAK_REPORTS_RESET",
+                {"count": len(reports)},
+                list({r["facility_id"] for r in reports.values()}),
+            )
         if reset:
             remove_import(s, "A", logout_reset=True)
         sessions = s["settings"].setdefault("sessions", {})
         for token, record in list(sessions.items()):
             if token == x_demo_session or (reset and record["facility_id"] == "A"):
                 del sessions[token]
-    return {"status": "logged_out", "reset": reset}
+    return {
+        "status": "logged_out",
+        "reset": reset,
+        "reports_cleared": len(reports),
+        "job": enqueue(store) if reports else None,
+    }
 
 
 @app.get("/onboarding/template/{fid}")

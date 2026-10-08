@@ -15,7 +15,7 @@ import {
   Download,
 } from "lucide-react";
 import { api, post, fmt, days, date, exportUrl, ApiError } from "./lib/api";
-import type { Snapshot, Batch, Negotiation } from "./lib/types";
+import type { Snapshot, Batch, Negotiation, Message } from "./lib/types";
 import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
@@ -52,6 +52,35 @@ function Card({
     </section>
   );
 }
+function OfferCalculation({ message }: { message: Message }) {
+  const review = message.evidence;
+  if (!review) return null;
+  return (
+    <details>
+      <summary>
+        Forecast calculation: {fmt(review.offered_quantity)} offered →{" "}
+        {fmt(review.recommended_quantity)} useful units
+      </summary>
+      <p>
+        Seven-day planning demand: {fmt(review.planning_7_days)}. Extra expiry
+        waste if accepted: {fmt(review.additional_waste_if_accepted)} units.
+        Existing stock and confirmed arrivals are included.
+      </p>
+      {review.batches.map((batch) => (
+        <p key={batch.batch_id}>
+          {batch.batch_id}: {fmt(batch.quantity)} offered,{" "}
+          {fmt(batch.predicted_consumed)} expected to be consumed. Arrival{" "}
+          {date(batch.arrives_at)} · expiry {date(batch.expires_at)}.
+        </p>
+      ))}
+      <small>
+        Forecast run {review.forecast_run_id} · earliest-expiry-first simulation
+        · whole packs
+      </small>
+    </details>
+  );
+}
+
 export function TrioLanding() {
   const [selected, setSelected] = useState(
     new URLSearchParams(location.search).get("login") || "A",
@@ -1009,6 +1038,7 @@ function Proposal({
               {NAME[m.actor] || m.actor} · {m.type}
             </strong>
             <p>{m.text}</p>
+            <OfferCalculation message={m} />
             <small>
               {(m as typeof m & { mode?: string }).mode ||
                 "Deterministic constrained negotiation"}{" "}
@@ -1643,6 +1673,7 @@ function Operations({
                                   {NAME[m.actor] || m.actor} · {m.type}
                                 </strong>
                                 <p>{m.text}</p>
+                                <OfferCalculation message={m} />
                                 <small>
                                   {m.mode || "Deterministic allocation message"}{" "}
                                   · {new Date(m.at).toLocaleTimeString()}
