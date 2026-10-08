@@ -21,6 +21,9 @@ import {
   AlertTriangle,
   Network,
   Download,
+  X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { api, post, fmt, days, date, exportUrl, ApiError } from "./lib/api";
 import type { Snapshot, Batch, Negotiation, Message } from "./lib/types";
@@ -90,28 +93,43 @@ function OfferCalculation({ message }: { message: Message }) {
   );
 }
 
-export function TrioLanding() {
+export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
   const [logoutNotice] = useState(() =>
     sessionStorage.getItem("inception-logout-notice"),
   );
   useEffect(() => {
     sessionStorage.removeItem("inception-logout-notice");
   }, []);
-  const [selected, setSelected] = useState(
-    new URLSearchParams(location.search).get("login") || "A",
+  // The sign-in dialog opens over the landing page; /login (used by approval
+  // links and logout) opens it directly, prefilled for the linked hospital.
+  const [open, setOpen] = useState(page === "login");
+  const [email, setEmail] = useState(
+    () => EMAILS[new URLSearchParams(location.search).get("login") || ""] || "",
   );
+  function openLogin() {
+    setOpen(true);
+    if (location.pathname !== "/login")
+      history.pushState(null, "", "/login" + location.search);
+  }
+  function closeLogin() {
+    setOpen(false);
+    setError("");
+    history.pushState(null, "", "/");
+  }
+  useEffect(() => {
+    const sync = () => setOpen(location.pathname === "/login");
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeLogin();
+    addEventListener("popstate", sync);
+    if (open) addEventListener("keydown", onKey);
+    return () => {
+      removeEventListener("popstate", sync);
+      removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const q = useQuery({
-    queryKey: ["trio-guide"],
-    refetchInterval: 2000,
-    queryFn: () =>
-      api<{ hospitals: { id: string; onboarded: boolean }[] }>(
-        "/demo/guide",
-        "judge",
-      ),
-  });
   async function login() {
     setBusy(true);
     setError("");
@@ -119,12 +137,12 @@ export function TrioLanding() {
       const r = await post<{ session: string; facility_id: string }>(
         "/auth/login",
         "judge",
-        { email: EMAILS[selected], password },
+        { email: email.trim(), password },
       );
-      sessionStorage.setItem("inception-session-" + selected, r.session);
+      sessionStorage.setItem("inception-session-" + r.facility_id, r.session);
       window.location.href =
         "/hospital/" +
-        selected +
+        r.facility_id +
         (new URLSearchParams(location.search).get("tab") === "approvals"
           ? "?tab=approvals"
           : "");
@@ -143,124 +161,143 @@ export function TrioLanding() {
         </a>
       </header>
       <main>
-        <section className="network-hero">
-          <div className="network-hero-copy">
-            <span className="eyebrow">
-              <span className="hero-eyebrow-line" /> MEDICAL SUPPLY INTELLIGENCE
-            </span>
-            <h1>
-              One network.
-              <br />
-              Better prepared.
-            </h1>
-            <p className="landing-lead">
-              The right supplies. The right hospital. Before they’re needed.
-            </p>
-            <p className="hero-description">
-              Turn everyday inventory into shared foresight. Anticipate
-              shortages, connect nearby hospitals, and coordinate transfers with
-              confidence.
-            </p>
-            <a className="hero-login-link" href="#hospital-login">
-              Enter your hospital <ArrowRight size={16} />
-            </a>
-          </div>
-          <Suspense
-            fallback={
-              <div className="hospital-network network-loading" role="status">
-                Preparing the hospital network…
-              </div>
-            }
-          >
-            <HospitalNetwork />
-          </Suspense>
-        </section>
-        <div className="login-section-heading" id="hospital-login">
-          <div>
-            <span className="eyebrow">YOUR WORKSPACE</span>
-            <h2>Care starts with connection.</h2>
-          </div>
-          <p>Choose your hospital to get started.</p>
-        </div>
-        {logoutNotice && (
-          <p role="status" className="notice">
-            {logoutNotice}
-          </p>
-        )}
-        <div className="trio-login-grid">
-          <div className="trio-hospital-options">
-            {Object.entries(NAME).map(([id, name]) => (
-              <button
-                key={id}
-                className={selected === id ? "selected" : ""}
-                onClick={() => setSelected(id)}
-              >
-                <span>
-                  {id === "A"
-                    ? "01 · YOUR ONBOARDING HOSPITAL"
-                    : id === "B"
-                      ? "02 · NEARBY HOSPITAL"
-                      : "03 · OUTSIDE-ZONE DONOR"}
-                </span>
-                <strong>{name}</strong>
-                <small>
-                  {q.data?.hospitals.find((h) => h.id === id)?.onboarded
-                    ? "CSV loaded · ready to demo"
-                    : "Upload one CSV after login"}
-                </small>
-              </button>
-            ))}
-          </div>
-          <Card
-            title="Hospital administrator login"
-            sub="Local demonstration accounts; use a separate tab for each hospital."
-          >
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                login();
-              }}
-            >
-              <label>
-                Email
-                <input aria-label="Email" value={EMAILS[selected]} readOnly />
-              </label>
-              <label>
-                Password
-                <input
-                  aria-label="Password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-              <p className="microcopy">
-                Demo password: <code>Demo@2026</code>
+        {
+          <section className="network-hero">
+            <div className="network-hero-copy">
+              <span className="eyebrow">
+                <span className="hero-eyebrow-line" /> MEDICAL SUPPLY
+                INTELLIGENCE
+              </span>
+              <h1>
+                One network.
+                <br />
+                Better prepared.
+              </h1>
+              <p className="landing-lead">
+                The right supplies. The right hospital. Before they’re needed.
               </p>
-              {error && (
-                <p className="text-red" role="alert">
-                  {error}
+              <p className="hero-description">
+                Turn everyday inventory into shared foresight. Anticipate
+                shortages, connect nearby hospitals, and coordinate transfers
+                with confidence.
+              </p>
+              <a
+                className="hero-login-link"
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openLogin();
+                }}
+              >
+                Enter your hospital <ArrowRight size={16} />
+              </a>
+            </div>
+            <Suspense
+              fallback={
+                <div className="hospital-network network-loading" role="status">
+                  Preparing the hospital network…
+                </div>
+              }
+            >
+              <HospitalNetwork />
+            </Suspense>
+          </section>
+        }
+        {open && (
+          <div
+            className="login-backdrop"
+            onMouseDown={(e) => e.target === e.currentTarget && closeLogin()}
+          >
+            <div
+              className="login-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="login-title"
+            >
+              <button
+                type="button"
+                className="login-close"
+                aria-label="Close sign in"
+                onClick={closeLogin}
+              >
+                <X size={18} />
+              </button>
+              <div className="login-logo">
+                <Activity size={26} />
+              </div>
+              <h2 id="login-title">Sign in to your hospital</h2>
+              {logoutNotice && (
+                <p role="status" className="login-notice">
+                  {logoutNotice}
                 </p>
               )}
-              <Button disabled={busy} type="submit">
-                {busy ? "Signing in…" : "Log in"}
-                <ArrowRight size={15} />
-              </Button>
-            </form>
-          </Card>
-        </div>
-        <a className="control-entry" href="http://localhost:5174">
-          <Network />
-          <div>
-            <strong>Live operations console</strong>
-            <p>
-              Forecast → stock risk → outbreak-aware donor search → negotiations
-              → human approval.
-            </p>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  login();
+                }}
+              >
+                <input
+                  aria-label="Email"
+                  type="email"
+                  placeholder="Hospital email"
+                  autoComplete="username"
+                  autoFocus={!email}
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <div className="login-password">
+                  <input
+                    aria-label="Password"
+                    placeholder="Password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    autoFocus={!!email}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="login-eye"
+                    aria-label={
+                      showPassword ? "Hide characters" : "Show characters"
+                    }
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {error && (
+                  <p className="login-error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <button type="submit" className="login-submit" disabled={busy}>
+                  {busy ? "Signing in…" : "Log in"}
+                </button>
+              </form>
+              <p className="login-footnote">
+                Demo accounts: admin@kaveri.demo · admin@chamundi.demo ·
+                admin@mandya.demo — password <code>Demo@2026</code>
+              </p>
+            </div>
           </div>
-          <ArrowRight />
-        </a>
+        )}
+        {
+          <a className="control-entry" href="http://localhost:5174">
+            <Network />
+            <div>
+              <strong>Live operations console</strong>
+              <p>
+                Forecast → stock risk → outbreak-aware donor search →
+                negotiations → human approval.
+              </p>
+            </div>
+            <ArrowRight />
+          </a>
+        }
         <p className="microcopy">
           Synthetic hospital data. Local demo login is not production
           authentication. Chamundi and Mandya are already onboarded using their
@@ -295,7 +332,7 @@ export default function TrioApp() {
   useEffect(() => {
     if (!authenticated)
       location.href =
-        "/?login=" +
+        "/login?login=" +
         actor +
         (new URLSearchParams(location.search).get("tab") === "approvals"
           ? "&tab=approvals"
@@ -311,7 +348,7 @@ export default function TrioApp() {
   useEffect(() => {
     if (!consoleMode && sessionExpired) {
       sessionStorage.removeItem("inception-session-" + actor);
-      location.replace("/?login=" + actor);
+      location.replace("/login?login=" + actor);
     }
   }, [sessionExpired, consoleMode, actor]);
   useEffect(() => {
@@ -360,7 +397,7 @@ export default function TrioApp() {
           "inception-logout-notice",
           "Kaveri’s CSV import, inventory and forecasts have been cleared. Log in and upload the CSV to begin again.",
         );
-      location.replace("/");
+      location.replace("/login");
     } catch (e) {
       setError(String(e));
       setBusy(false);

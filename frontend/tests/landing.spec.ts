@@ -20,21 +20,17 @@ test("WebGL scene is frameless without animation controls", async ({
   const sequence = ["A", "B", "D"];
   const start = sequence.indexOf(initial!);
   for (let step = 1; step <= 3; step++) {
-    await expect(network).toHaveAttribute("data-active-hospital", sequence[(start + step) % 3], { timeout: 3500 });
+    await expect(network).toHaveAttribute(
+      "data-active-hospital",
+      sequence[(start + step) % 3],
+      { timeout: 3500 },
+    );
   }
-  await expect(page.locator(".trio-hospital-options .selected")).toContainText("Kaveri");
-  await page
-    .locator(".trio-hospital-options button")
-    .filter({ hasText: "Mandya" })
-    .click();
   await expect(page.getByText("MYSURU CARE NETWORK")).toHaveCount(0);
   await expect(page.locator(".network-facilities")).toHaveCount(0);
   await expect(page.locator(".hospital-network")).toHaveCSS(
     "background-color",
     "rgba(0, 0, 0, 0)",
-  );
-  await expect(page.locator(".trio-hospital-options .selected")).toContainText(
-    "Mandya",
   );
   await expect(
     page.getByRole("button", { name: /(?:Pause|Play).*animation/ }),
@@ -71,11 +67,20 @@ test("login selection remains available without WebGL", async ({ page }) => {
   await expect(
     page.getByText("Network schematic · 3D unavailable"),
   ).toBeVisible();
-  await page
-    .locator(".trio-hospital-options button")
-    .filter({ hasText: "Chamundi" })
-    .click();
-  await expect(page.locator(".trio-hospital-options .selected")).toContainText(
-    "Chamundi",
-  );
+  await page.getByRole("link", { name: "Enter your hospital" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("Enter your hospital opens the sign-in dialog", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("link", { name: "Enter your hospital" }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to your hospital" });
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(dialog.getByLabel("Email")).toBeVisible();
+  await expect(dialog.getByLabel("Password")).toBeVisible();
+  await page.getByRole("button", { name: "Close sign in" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
 });

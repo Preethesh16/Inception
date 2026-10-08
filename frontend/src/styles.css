@@ -3519,6 +3519,11 @@ pre {
   font-weight: 600;
   box-shadow: 0 6px 16px #194c3512;
   transition: background 0.2s;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
 }
 .hero-login-link:hover {
   background: #134b3d;
@@ -3813,4 +3818,174 @@ pre {
 
 .hospital-network .network-canvas {
   cursor: default;
+}
+
+/* Hospital sign-in dialog over the landing page. */
+.login-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: #0f2a23b8;
+  backdrop-filter: blur(6px);
+  animation: login-fade 0.18s ease-out;
+}
+.login-modal {
+  position: relative;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 40px 40px 26px;
+  border-radius: 28px;
+  background: white;
+  box-shadow: 0 30px 80px #04140f59;
+  text-align: center;
+  animation: login-rise 0.22s ease-out;
+}
+.login-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #4d6259;
+  cursor: pointer;
+}
+.login-close:hover {
+  background: #eef4f1;
+  color: #17342d;
+}
+.login-logo {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+  border-radius: 16px;
+  background: linear-gradient(140deg, #2b8a72, #1c6553);
+  color: white;
+  box-shadow: 0 8px 20px #1c655340;
+}
+.login-modal h2 {
+  margin-bottom: 26px;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  color: #17342d;
+}
+.login-notice {
+  margin: -12px 0 18px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #eef7f2;
+  color: #2c5a4c;
+  font-size: 12px;
+  text-align: left;
+}
+.login-modal form {
+  display: grid;
+  gap: 12px;
+}
+.trio-landing .login-modal input {
+  margin: 0;
+  width: 100%;
+  height: 54px;
+  padding: 0 22px;
+  border: 1px solid #d3e6dc;
+  border-radius: 999px;
+  background: #eef6f2;
+  color: #17342d;
+  font-size: 15px;
+}
+.trio-landing .login-modal input:focus {
+  outline: none;
+  border-color: #1c6553;
+  background: white;
+  box-shadow: 0 0 0 4px #1c655318;
+}
+.login-password {
+  position: relative;
+}
+.trio-landing .login-password input {
+  padding-right: 52px;
+}
+.login-eye {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6b8076;
+  cursor: pointer;
+}
+.login-eye:hover {
+  color: #1c6553;
+}
+.login-error {
+  color: #b42318;
+  font-size: 12px;
+  text-align: left;
+  padding: 0 8px;
+}
+.login-submit {
+  height: 54px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: #1c6553;
+  color: white;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 22px #1c655333;
+  transition: background 0.15s;
+}
+.login-submit:hover:not(:disabled) {
+  background: #134b3d;
+}
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.login-footnote {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #e6eeea;
+  color: #8a9a91;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.login-footnote code {
+  color: #4d6259;
+}
+@keyframes login-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+@media (max-width: 480px) {
+  .login-modal {
+    padding: 36px 22px 22px;
+    border-radius: 22px;
+  }
 }

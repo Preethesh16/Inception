@@ -21,15 +21,13 @@ async function waitAnalysis(request: any, count = 9) {
 }
 async function login(page: Page, id: string) {
   await page.goto("/");
-  const names: Record<string, string> = {
-    A: "Kaveri General",
-    B: "Chamundi Community",
-    D: "Mandya Regional",
+  const emails: Record<string, string> = {
+    A: "admin@kaveri.demo",
+    B: "admin@chamundi.demo",
+    D: "admin@mandya.demo",
   };
-  await page
-    .locator(".trio-hospital-options button")
-    .filter({ hasText: names[id] })
-    .click();
+  await page.getByRole("link", { name: "Enter your hospital" }).click();
+  await page.getByLabel("Email").fill(emails[id]);
   await page.getByLabel("Password").fill("Demo@2026");
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(
@@ -448,9 +446,7 @@ test("hospital has four tabs, an empty approval inbox, and scoped approval login
   await expect(page.locator("[data-proposal-id]")).toHaveCount(0);
   const linked = await context.newPage();
   await linked.goto("http://localhost:5173/hospital/D?tab=approvals");
-  await expect(
-    linked.locator(".trio-hospital-options button.selected"),
-  ).toContainText("Mandya");
+  await expect(linked.getByLabel("Email")).toHaveValue("admin@mandya.demo");
   await linked.getByLabel("Password").fill("Demo@2026");
   await linked.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(linked.locator("h1")).toHaveText("Approvals");

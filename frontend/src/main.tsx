@@ -10,8 +10,12 @@ createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={client}>
       {window.location.port !== "5174" &&
-      window.location.pathname === "/" &&
-      new URLSearchParams(window.location.search).get("view") !== "console" ? (
+      window.location.pathname === "/login" ? (
+        <Landing page="login" />
+      ) : window.location.port !== "5174" &&
+        window.location.pathname === "/" &&
+        new URLSearchParams(window.location.search).get("view") !==
+          "console" ? (
         <Landing />
       ) : (
         <App />
