@@ -88,6 +88,12 @@ function OfferCalculation({ message }: { message: Message }) {
 }
 
 export function TrioLanding() {
+  const [logoutNotice] = useState(() =>
+    sessionStorage.getItem("inception-logout-notice"),
+  );
+  useEffect(() => {
+    sessionStorage.removeItem("inception-logout-notice");
+  }, []);
   const [selected, setSelected] = useState(
     new URLSearchParams(location.search).get("login") || "A",
   );
@@ -96,6 +102,7 @@ export function TrioLanding() {
   const [busy, setBusy] = useState(false);
   const q = useQuery({
     queryKey: ["trio-guide"],
+    refetchInterval: 2000,
     queryFn: () =>
       api<{ hospitals: { id: string; onboarded: boolean }[] }>(
         "/demo/guide",
@@ -144,6 +151,11 @@ export function TrioLanding() {
           Watch forecasts guide safe transfers between three connected
           hospitals.
         </p>
+        {logoutNotice && (
+          <p role="status" className="notice">
+            {logoutNotice}
+          </p>
+        )}
         <div className="trio-login-grid">
           <div className="trio-hospital-options">
             {Object.entries(NAME).map(([id, name]) => (
@@ -301,6 +313,28 @@ export default function TrioApp() {
       setBusy(false);
     }
   }
+  async function logoutHospital() {
+    setBusy(true);
+    setError("");
+    try {
+      await post("/auth/logout", actor, {});
+      sessionStorage.removeItem("inception-session-" + actor);
+      if (actor === "A") {
+        Object.keys(sessionStorage)
+          .filter((key) => key.startsWith("forecast-checkpoint-A:"))
+          .forEach((key) => sessionStorage.removeItem(key));
+      }
+      if (actor === "A")
+        sessionStorage.setItem(
+          "inception-logout-notice",
+          "Kaveri’s CSV import, inventory and forecasts have been cleared. Log in and upload the CSV to begin again.",
+        );
+      location.replace("/");
+    } catch (e) {
+      setError(String(e));
+      setBusy(false);
+    }
+  }
   const data = sessionExpired ? undefined : q.data;
   const running = data?.jobs.findLast((j) =>
     ["queued", "running"].includes(j.status),
@@ -308,7 +342,19 @@ export default function TrioApp() {
   return (
     <div className="app-shell trio-shell">
       <aside className="sidebar">
-        <a className="brand" href="/">
+        <a
+          className="brand"
+          href="/"
+          aria-label={
+            consoleMode ? "Inception home" : "Log out and return to login"
+          }
+          onClick={(event) => {
+            if (!consoleMode) {
+              event.preventDefault();
+              if (!busy) void logoutHospital();
+            }
+          }}
+        >
           <Activity /> <span>inception.</span>
         </a>
         <div className="workspace-label">
@@ -367,27 +413,7 @@ export default function TrioApp() {
             </h1>
           </div>
           {!consoleMode && (
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await post("/auth/logout", actor, {});
-                  sessionStorage.removeItem("inception-session-" + actor);
-                  if (actor === "A") {
-                    Object.keys(sessionStorage)
-                      .filter((key) => key.startsWith("forecast-checkpoint-A:"))
-                      .forEach((key) => sessionStorage.removeItem(key));
-                  }
-                  location.replace("/");
-                } catch (e) {
-                  setError(String(e));
-                  setBusy(false);
-                }
-              }}
-            >
+            <Button variant="ghost" disabled={busy} onClick={logoutHospital}>
               <LogOut size={15} />
               Log out
             </Button>

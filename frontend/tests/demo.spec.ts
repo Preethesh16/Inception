@@ -461,52 +461,64 @@ test("hospital has four tabs, an empty approval inbox, and scoped approval login
   });
 });
 
-test("Hospital A logout empties its open console without affecting partners", async ({
-  page,
-  context,
-  request,
-}) => {
-  await request.post("/api/demo/onboarding-reset", { headers });
-  await waitAnalysis(request, 6);
-  const imported = await request.post("/api/onboarding/csv", {
-    headers: { "X-Demo-Session": "demo-A" },
-    multipart: {
-      file: {
-        name: "A.csv",
-        mimeType: "text/csv",
-        buffer: readFileSync("../demo-data/three-hospital/A-hospital.csv"),
+for (const exitMethod of ["button", "logo"] as const) {
+  test(`Hospital A logout via ${exitMethod} empties its open console without affecting partners`, async ({
+    page,
+    context,
+    request,
+  }) => {
+    await request.post("/api/demo/onboarding-reset", { headers });
+    await waitAnalysis(request, 6);
+    const imported = await request.post("/api/onboarding/csv", {
+      headers: { "X-Demo-Session": "demo-A" },
+      multipart: {
+        file: {
+          name: "A.csv",
+          mimeType: "text/csv",
+          buffer: readFileSync("../demo-data/three-hospital/A-hospital.csv"),
+        },
       },
-    },
+    });
+    expect(imported.ok()).toBe(true);
+    await waitAnalysis(request, 9);
+    await page.goto("http://localhost:5174/?hospital=A");
+    await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
+    await expect(page.locator(".forecast-summary")).toHaveCount(1);
+    const hospital = await context.newPage();
+    await hospital.setViewportSize({ width: 641, height: 738 });
+    await login(hospital, "A");
+    const otherHospitalTab = await context.newPage();
+    await login(otherHospitalTab, "A");
+    if (exitMethod === "button")
+      await hospital
+        .getByRole("button", { name: "Log out", exact: true })
+        .click();
+    else
+      await hospital
+        .getByRole("link", { name: "Log out and return to login", exact: true })
+        .click();
+    await expect(hospital).toHaveURL("http://localhost:5173/");
+    await expect(hospital.getByRole("status")).toContainText(
+      "Kaveri’s CSV import, inventory and forecasts have been cleared",
+    );
+    await expect(otherHospitalTab).toHaveURL("http://localhost:5173/?login=A");
+    await expect(
+      page.getByText("No hospital data imported", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Product", { exact: true })).toBeDisabled();
+    await expect(page.locator("select[aria-label=Product] option")).toHaveText([
+      "No products — upload CSV",
+    ]);
+    await expect(page.locator(".forecast-summary")).toHaveCount(0);
+    await expect(page.locator(".workflow-stop")).toHaveCount(0);
+    await waitAnalysis(request, 6);
+    await expect(page.locator(".forecast-summary")).toHaveCount(0);
+    await page.screenshot({
+      path: "../artifacts/empty-hospital-console.png",
+      fullPage: true,
+    });
+    await page.getByLabel("Controlled hospital").selectOption("B");
+    await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
+    await expect(page.locator(".forecast-summary")).toHaveCount(1);
   });
-  expect(imported.ok()).toBe(true);
-  await waitAnalysis(request, 9);
-  await page.goto("http://localhost:5174/?hospital=A");
-  await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
-  await expect(page.locator(".forecast-summary")).toHaveCount(1);
-  const hospital = await context.newPage();
-  await hospital.setViewportSize({ width: 641, height: 738 });
-  await login(hospital, "A");
-  const otherHospitalTab = await context.newPage();
-  await login(otherHospitalTab, "A");
-  await hospital.getByRole("button", { name: "Log out", exact: true }).click();
-  await expect(hospital).toHaveURL("http://localhost:5173/");
-  await expect(otherHospitalTab).toHaveURL("http://localhost:5173/?login=A");
-  await expect(
-    page.getByText("No hospital data imported", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Product", { exact: true })).toBeDisabled();
-  await expect(page.locator("select[aria-label=Product] option")).toHaveText([
-    "No products — upload CSV",
-  ]);
-  await expect(page.locator(".forecast-summary")).toHaveCount(0);
-  await expect(page.locator(".workflow-stop")).toHaveCount(0);
-  await waitAnalysis(request, 6);
-  await expect(page.locator(".forecast-summary")).toHaveCount(0);
-  await page.screenshot({
-    path: "../artifacts/empty-hospital-console.png",
-    fullPage: true,
-  });
-  await page.getByLabel("Controlled hospital").selectOption("B");
-  await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
-  await expect(page.locator(".forecast-summary")).toHaveCount(1);
-});
+}
