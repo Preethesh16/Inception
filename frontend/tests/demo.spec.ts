@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "./fixtures";
 const headers = { "X-Demo-Session": "demo-judge" };
 async function waitAnalysis(request: any, count = 9) {
   await expect
@@ -135,7 +136,10 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await expect(
     consolePage.getByRole("heading", { name: "Every decision, visible." }),
   ).toBeVisible();
-  await consolePage.getByLabel("Follow actionable stages").uncheck();
+  await consolePage.getByLabel("Advance after an actionable refresh").uncheck();
+  await consolePage
+    .getByRole("button", { name: "3 Approve & deliver" })
+    .click();
   for (const name of [
     "Claim courier job",
     "Confirm pickup",
@@ -146,7 +150,9 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await expect(
     consolePage.getByText("Ledger balanced", { exact: true }),
   ).toBeVisible();
-  await expect(consolePage.locator(".console-stage.done")).toHaveCount(6);
+  await expect(
+    consolePage.getByText("Received", { exact: true }).first(),
+  ).toBeVisible();
   await consolePage.screenshot({
     path: "../artifacts/trio-console.png",
     fullPage: true,
@@ -220,23 +226,115 @@ test("console shows only the controlled hospital and all its products", async ({
   await expect(
     page.getByText("Awaiting hospital onboarding", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("Forecast series")).toHaveCount(0);
-  await page.getByLabel("Controlled hospital").selectOption("D");
-  await expect(page.getByLabel("Forecast series")).toHaveCount(3);
-  const labels = await page.getByLabel("Forecast series").allTextContents();
+  await expect(page.locator(".forecast-summary")).toHaveCount(0);
+  for (const hospital of ["D", "B"]) {
+    await page.getByLabel("Controlled hospital").selectOption(hospital);
+    await expect(page.locator(".product-overview button")).toHaveCount(3);
+    await expect(page.locator(".forecast-summary")).toHaveCount(1);
+    const snapshot = await (
+      await request.get("/api/snapshot", { headers })
+    ).json();
+    for (const supply of snapshot.supplies) {
+      await page
+        .getByRole("button", { name: "View " + supply.name, exact: true })
+        .click();
+      await expect(page.locator(".forecast-summary h2")).toHaveText(
+        supply.name,
+      );
+      const risk = snapshot.allocation.risks[hospital + ":" + supply.id];
+      await expect(page.locator(".simple-numbers strong").first()).toHaveText(
+        new Intl.NumberFormat("en-IN").format(risk.demand_7),
+      );
+      if (
+        snapshot.allocation.searches[hospital + ":" + supply.id].kind === "none"
+      ) {
+        await expect(
+          page.locator(".simple-steps button").nth(1),
+        ).toBeDisabled();
+      }
+    }
+  }
+});
+
+test("refresh explains demand separately from stock and advances only for actionable products", async ({
+  page,
+  request,
+}) => {
+  await request.post("/api/demo/onboarding-reset", { headers });
+  let snapshot = await waitAnalysis(request, 6);
+  await page.goto("http://localhost:5174/?hospital=D");
+  await expect(page.locator(".forecast-summary")).toBeVisible();
+  const safe = snapshot.supplies.find(
+    (s: any) => snapshot.allocation.searches["D:" + s.id].kind === "none",
+  );
+  expect(safe).toBeTruthy();
+  await page
+    .getByRole("button", { name: "View " + safe.name, exact: true })
+    .click();
+  const refresh = page.waitForRequest(
+    (r) => r.url().endsWith("/api/analysis-runs") && r.method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "Refresh forecast", exact: true })
+    .click();
+  expect((await refresh).postDataJSON()).toEqual({ force: true });
+  await waitAnalysis(request, 6);
+  await expect(page.locator(".forecast-change")).toBeVisible();
+  await expect(page.locator(".simple-steps button").nth(0)).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  await expect(page.locator(".simple-steps button").nth(1)).toBeDisabled();
+  await page.getByRole("button", { name: /View Oral/ }).click();
+  const oldDemand = await page
+    .locator(".simple-numbers strong")
+    .first()
+    .textContent();
+  await page.locator(".forecast-explanation summary").click();
+  await expect(page.locator(".forecast-equation")).toBeVisible();
+  snapshot = await (await request.get("/api/snapshot", { headers })).json();
+  const auth = await (
+    await request.post("/api/auth/login", {
+      data: { email: "admin@mandya.demo", password: "Demo@2026" },
+    })
+  ).json();
+  for (const b of snapshot.inventory.filter(
+    (b: any) => b.facility_id === "D" && b.supply_id === "ORS",
+  )) {
+    const response = await request.post("/api/inventory/batches/" + b.id, {
+      headers: { "X-Demo-Session": auth.session },
+      data: {
+        quantity: 10,
+        expires_at: b.expires_at,
+        expected_quantity: b.quantity,
+        expected_expiry: b.expires_at,
+        reason: "Isolated browser test",
+        command_id: crypto.randomUUID(),
+      },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  await waitAnalysis(request, 6);
+  await expect(page.locator(".simple-steps button").nth(1)).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  await page.locator(".simple-steps button").first().click();
+  await expect(page.locator(".forecast-change")).toContainText(
+    "The demand prediction stayed the same",
+  );
+  await expect(page.locator(".simple-numbers strong").first()).toHaveText(
+    oldDemand!,
+  );
+  await expect(page.locator(".simple-numbers strong").nth(1)).toHaveText("20");
+  await page.screenshot({
+    path: "../artifacts/simple-forecast-console.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
   expect(
-    labels.every(
-      (s) => s.includes("Mandya Regional Hospital") && !s.includes("Chamundi"),
-    ),
-  ).toBe(true);
-  await expect(
-    page.getByText("Product-by-product search decisions", { exact: true }),
-  ).toBeVisible();
-  await page.getByLabel("Controlled hospital").selectOption("B");
-  await expect(page.getByLabel("Forecast series")).toHaveCount(3);
-  expect(
-    (await page.getByLabel("Forecast series").allTextContents()).every((s) =>
-      s.includes("Chamundi Community Hospital"),
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
 });

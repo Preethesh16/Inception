@@ -99,7 +99,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             stroke="#bac7cc"
             strokeDasharray="3 3"
             label={{
-              value: "TODAY",
+              value: "FORECAST START",
               position: "insideTopRight",
               fontSize: 9,
               fill: "#82909c",

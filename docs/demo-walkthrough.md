@@ -53,7 +53,7 @@ The system reruns planning and replaces stale recommendations. Mandya becomes th
 3. Log into Mandya → **Approvals**, inspect its own explanation and approve the same proposal version.
 4. The reservation occurs only after both approvals. Any material counteroffer clears previous approvals.
 5. Console → final stage: **Claim courier job → Confirm pickup → Start transit → Confirm receipt**.
-6. Inspect **Ledger balanced** and compare projected or simulated realised outcomes.
+6. Inspect **Ledger balanced** and the received transfer.
 
 Automatic hospital briefings are generated when new offers appear. With `OPENAI_API_KEY`, they use the Responses API and scoped tools, with at most one counteroffer per proposal per agent pass and the existing three-round limit. Without it, the conversation clearly labels deterministic explanations. User-requested counteroffers are server-validated. Neither model nor console can bypass administrator approval.
 
@@ -71,7 +71,9 @@ Reserved batches cannot be edited: complete or cancel the relevant transfer firs
 - **AI chat:** ask forecasting and operational questions; inspect the forecast chart and arithmetic.
 - **Approvals:** conversations, constrained counteroffers, approvals and incoming/outgoing delivery state.
 
-The console follows evidence → demand and risk → outbreak-aware donor search → negotiations → dual approvals → delivery/outcomes. Its automatic scrolling is optional and follows persisted backend events. While a new job runs, older completed results remain visible until replaced.
+The console has three stages: **Forecast → Find a donor/recipient → Approve & deliver**. Select the hospital, then a product. Only one detailed forecast is shown at a time. Expand **How was this calculated?** for the daily prediction sum, incident adjustments and stock simulation. **Refresh forecast** forces new inference and displays changes in demand, usable stock and coverage against the previous result viewed in this tab. While a job runs, the last completed result remains labelled and visible.
+
+Search is enabled only after the backend records an actionable search for that product and run. With **Advance after an actionable refresh** enabled, the console moves to search after the updated forecast is shown. Products without a shortage or unused expiring surplus stay at Forecast. Approval and delivery remain a separate stage; hospital administrators approve in their dashboards.
 
 Forecasts refresh every five wall-clock minutes, and imports, edits and reports queue an immediate run. Unchanged raw inputs may reuse explicitly labelled cached output. Stock edits do not mutate consumption history. The scenario clock does not advance automatically.
 
@@ -87,7 +89,7 @@ Edit `.env` and restart `make dev` after configuring keys. Live external calls s
 
 ## Forecast-gated searches and focused console
 
-The console's **Controlled hospital** selector scopes product charts, evidence, proposals and outcomes to one hospital. Opening it from a hospital dashboard passes that hospital in the link. All of that hospital's products have a separate chart and a separate decision: **Find a donor**, **Find a recipient**, or **No search**. Partner forecasts still run from their own imported consumption histories; agents receive their own recent history, planning demand, input hash and model provenance.
+The console's **Controlled hospital** selector scopes product charts, evidence, proposals and outcomes to one hospital. Opening it from a hospital dashboard passes that hospital in the link. All of that hospital's products have a summary card; selecting one opens its chart and decision: **Find a donor**, **Find a recipient**, or **No search**. Partner forecasts still run from their own imported consumption histories; agents receive their own recent history, planning demand, input hash and model provenance.
 
 A donor search requires projected unmet demand of at least one supply pack within the 28-day supported horizon. A recipient search requires at least one whole pack of stock projected to expire unused locally, with no projected shortage at the donor. Expiry alone is not a trigger: stock needed locally is kept. An expiry-rescue recipient must consume the incoming stock before expiry without increasing its own waste. The donor's stress-demand protection, shelf-life margin, handling checks and outbreak exclusions still apply. If no recipient qualifies, the system explains why and does not create a proposal.
 

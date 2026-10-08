@@ -17,7 +17,7 @@ import {
 import { api, post, fmt, days, date, exportUrl } from "./lib/api";
 import type { Snapshot, Batch, Negotiation } from "./lib/types";
 import { Button, Badge } from "./components/ui";
-import { ForecastChart } from "./components/ForecastChart";
+import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
 const EMAILS: Record<string, string> = {
   A: "admin@kaveri.demo",
@@ -251,7 +251,7 @@ export default function TrioApp() {
     <div className="app-shell trio-shell">
       <aside className="sidebar">
         <a className="brand" href="/">
-          <Activity /> inception.
+          <Activity /> <span>inception.</span>
         </a>
         <div className="workspace-label">
           {consoleMode ? "LIVE OPERATIONS" : "HOSPITAL WORKSPACE"}
@@ -336,22 +336,25 @@ export default function TrioApp() {
           <p>Connecting to the inventory ledger…</p>
         ) : (
           <>
-            <div className="trio-status">
-              <Badge tone={running ? "amber" : "green"}>
-                {running ? "Analysis " + running.status : "Connected"}
-              </Badge>
-              <span>
-                Scenario date {date(data.demo.as_of)} · refresh every 5 minutes
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy || !!running}
-                onClick={() => act("/analysis-runs", { force: true })}
-              >
-                Run fresh forecast
-              </Button>
-            </div>
+            {!consoleMode && (
+              <div className="trio-status">
+                <Badge tone={running ? "amber" : "green"}>
+                  {running ? "Analysis " + running.status : "Connected"}
+                </Badge>
+                <span>
+                  Scenario date {date(data.demo.as_of)} · refresh every 5
+                  minutes
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || !!running}
+                  onClick={() => act("/analysis-runs", { force: true })}
+                >
+                  Run fresh forecast
+                </Button>
+              </div>
+            )}
             {consoleMode ? (
               <Operations data={data} act={act} busy={busy} />
             ) : (
@@ -820,97 +823,28 @@ function Chat({ actor, data }: { actor: string; data: Snapshot }) {
   );
 }
 function Forecasts({ data }: { data: Snapshot }) {
-  const [key, setKey] = useState("");
-  const changed = data.events.findLast((e) =>
-    ["INVENTORY_UPDATED", "REPORT_SUBMITTED", "HOSPITAL_ONBOARDED"].includes(
-      e.type,
-    ),
-  );
-  useEffect(() => {
-    if (!changed) return;
-    const details = changed.details as {
-      after?: { supply_id?: string };
-      supply_ids?: string[];
-      batch_id?: string;
-    };
-    const sid =
-      details.after?.supply_id ||
-      details.supply_ids?.[0] ||
-      data.inventory.find((b) => b.id === details.batch_id)?.supply_id ||
-      "ORS";
-    const next = data.forecasts.find(
-      (f) => f.facility_id === changed.facilities[0] && f.supply_id === sid,
-    );
-    if (next) setKey(next.id);
-  }, [changed?.id, data.forecasts.length]);
-  const f = data.forecasts.find((f) => f.id === key) || data.forecasts[0];
-  const r = data.risks.find(
-    (r) => r.facility_id === f?.facility_id && r.supply_id === f?.supply_id,
-  );
+  const [sid, setSid] = useState("ORS");
+  const f =
+    data.forecasts.find((f) => f.supply_id === sid) || data.forecasts[0];
   return (
-    <Card
-      title="Demand forecast & stock mathematics"
-      sub="Chronos and baselines use completed consumption history. Incident planning requirements are shown separately; daily P90 is a stress path, not a total-demand guarantee."
-    >
-      <select
-        aria-label="Forecast series"
-        value={f?.id || ""}
-        onChange={(e) => setKey(e.target.value)}
-      >
-        {data.forecasts.map((f) => (
-          <option key={f.id} value={f.id}>
-            {NAME[f.facility_id]} · {f.supply_id}
-          </option>
+    <>
+      <div className="product-switch" aria-label="Choose a supply">
+        {data.supplies.map((s) => (
+          <button
+            key={s.id}
+            className={f?.supply_id === s.id ? "selected" : ""}
+            onClick={() => setSid(s.id)}
+          >
+            {s.name}
+          </button>
         ))}
-      </select>
-      <ForecastChart forecast={f} />
-      {f && (
-        <>
-          <div className="trio-math">
-            <span>
-              <small>Raw 7-day median demand</small>
-              <strong>
-                {fmt(f.p50.slice(0, 7).reduce((a, b) => a + b, 0))}
-              </strong>
-            </span>
-            <span>
-              <small>Adjusted 7-day demand</small>
-              <strong>{fmt(r?.demand_7)}</strong>
-            </span>
-            <span>
-              <small>Usable stock</small>
-              <strong>{fmt(r?.stock)}</strong>
-            </span>
-            <span>
-              <small>Projected stock-out</small>
-              <strong>{days(r?.stockout_days)}</strong>
-            </span>
-          </div>
-          <p className="microcopy">
-            FEFO simulation: opening usable stock + confirmed arrivals −
-            reservations − forecast consumption − stock expiring before use.{" "}
-            {f.model} · {f.source} · computed{" "}
-            {new Date(f.computed_at).toLocaleString()}.
-          </p>
-          <details>
-            <summary>Daily calculations and input provenance</summary>
-            <pre>
-              {JSON.stringify(
-                {
-                  run_id: f.run_id,
-                  input_hash: f.input_hash,
-                  cutoff: f.cutoff,
-                  adjustments: f.adjustments,
-                  timeline: r?.timeline,
-                },
-                null,
-                2,
-              )}
-            </pre>
-          </details>
-        </>
-      )}
-    </Card>
+      </div>
+      <ForecastSummary
+        forecast={f}
+        risk={data.risks.find((r) => r.id === f?.id)}
+        supply={data.supplies.find((s) => s.id === f?.supply_id)}
+      />
+    </>
   );
 }
 function ReportForm({
@@ -1312,129 +1246,228 @@ function Operations({
   const [facility, setFacility] = useState(
     new URLSearchParams(location.search).get("hospital") || "A",
   );
-  const data: Snapshot = {
-    ...network,
-    forecasts: network.forecasts.filter((f) => f.facility_id === facility),
-    risks: network.risks.filter((r) => r.facility_id === facility),
-    inventory: network.inventory.filter((b) => b.facility_id === facility),
-    negotiations: network.negotiations.filter(
-      (n) => n.donor === facility || n.recipient === facility,
-    ),
-    transfers: network.transfers.filter(
-      (n) => n.donor === facility || n.recipient === facility,
-    ),
-    events: network.events.filter(
-      (e) => e.facilities.length === 0 || e.facilities.includes(facility),
-    ),
-    allocation: network.allocation
-      ? {
-          ...network.allocation,
-          deficits: network.allocation.deficits.filter(
-            (r) => r.facility_id === facility,
-          ),
-        }
-      : null,
-  };
-  const searchRows = Object.values(network.allocation?.searches || {}).filter(
-    (s) => s.facility_id === facility,
-  );
-  const shouldSearch = searchRows.some((s) => s.kind !== "none");
+  const [sid, setSid] = useState("ORS");
+  const [stage, setStage] = useState(1);
   const [follow, setFollow] = useState(true);
-  const [supply, setSupply] = useState("ORS");
-  const selectedSearch = searchRows.find((s) => s.supply_id === supply);
-  const [reveal, setReveal] = useState(false);
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
-  const previous = useRef("");
-  const active = data.jobs.findLast((j) =>
+  const [showMap, setShowMap] = useState(false);
+  const latestRun = useRef(network.demo.latest_run);
+  const section = useRef<HTMLDivElement | null>(null);
+  const active = network.jobs.findLast((j) =>
     ["queued", "running"].includes(j.status),
   );
-  const run = active?.id || data.demo.latest_run;
-  const events = data.events.filter((e) => e.run_id === run);
-  const changedAt =
-    data.events.findLast((e) =>
-      ["INVENTORY_UPDATED", "REPORT_SUBMITTED", "HOSPITAL_ONBOARDED"].includes(
-        e.type,
-      ),
-    )?.at || "";
-  const offerRun = data.negotiations.findLast(
+  const risks = network.allocation?.risks
+    ? Object.values(network.allocation.risks)
+    : network.risks;
+  const data: Snapshot = {
+    ...network,
+    forecasts: network.forecasts.filter(
+      (f) => f.facility_id === facility && f.supply_id === sid,
+    ),
+    risks: risks.filter(
+      (r) => r.facility_id === facility && r.supply_id === sid,
+    ),
+    inventory: network.inventory.filter(
+      (b) => b.facility_id === facility && b.supply_id === sid,
+    ),
+    negotiations: network.negotiations.filter(
+      (n) =>
+        (n.donor === facility || n.recipient === facility) &&
+        n.supply_id === sid,
+    ),
+    transfers: network.transfers.filter(
+      (t) =>
+        (t.donor === facility || t.recipient === facility) &&
+        t.supply_id === sid,
+    ),
+  };
+  const f = data.forecasts[0];
+  const r = data.risks[0];
+  const supply = network.supplies.find((s) => s.id === sid);
+  const gate = network.allocation?.searches?.[facility + ":" + sid];
+  const searchNeeded = !!gate && gate.kind !== "none";
+  const offers = data.negotiations.filter(
     (n) =>
-      ["Awaiting approvals", "Reserved", "Received"].includes(n.status) &&
-      (n.created_at || "") >= changedAt,
-  )?.run_id;
-  const transferEvents = data.events.filter(
-    (e) => e.run_id === run || e.run_id === offerRun,
-  );
-  const done = [
-    events.some((e) => e.type === "ANALYSIS_STARTED"),
-    events.some((e) => e.type === "FORECAST_COMPLETED"),
-    shouldSearch &&
-      events.some(
-        (e) => e.type === "SEARCH_COMPLETED" && e.facilities.includes(facility),
+      !["Needs re-evaluation", "Expired", "Cancelled", "Rejected"].includes(
+        n.status,
       ),
-    transferEvents.some((e) => e.type === "APPROVAL_REQUIRED"),
-    transferEvents.some((e) => e.type === "TRANSFER_RESERVED"),
-    transferEvents.some((e) => e.type === "RECEIVED"),
-  ];
-  const latest = done.lastIndexOf(true);
-  const change = facility + ":" + run + ":" + latest;
+  );
+  const canApprove = offers.length > 0 || data.transfers.length > 0;
+  const searchFinished =
+    searchNeeded &&
+    network.events.some(
+      (e) =>
+        e.type === "SEARCH_COMPLETED" &&
+        e.run_id === f?.run_id &&
+        e.facilities.includes(facility) &&
+        e.details.supply_id === sid,
+    );
+  const failed = network.jobs.findLast(
+    (j) => j.id === network.jobs.at(-1)?.id && j.status === "failed",
+  );
   useEffect(() => {
-    if (follow && previous.current !== change && latest >= 0) {
-      refs.current[Math.min(latest + 1, 5)]?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
-      previous.current = change;
+    if (active) {
+      setStage(1);
+      return;
     }
-  }, [change, latest, follow]);
-  const outcomes = useQuery({
-    queryKey: ["trio-outcomes", facility, data.demo.revision, reveal],
-    queryFn: () =>
-      api<{
-        basis: string;
-        with: { unmet_units: number; expiry_units: number };
-        without: { unmet_units: number; expiry_units: number };
-      }>("/demo/outcomes?reveal=" + reveal + "&facility=" + facility, "judge"),
-    enabled: !!data.forecasts.length,
-  });
-  const labels = [
-    "Evidence received",
-    "Demand & stock-risk analysis",
-    "Forecast-gated redistribution search",
-    "Hospital agent negotiation",
-    "Dual approval & reservation",
-    "Delivery & measured outcome",
-  ];
+    if (latestRun.current === network.demo.latest_run) return;
+    if (!follow || !searchNeeded) latestRun.current = network.demo.latest_run;
+    if (follow && searchFinished) {
+      const t = setTimeout(() => {
+        latestRun.current = network.demo.latest_run;
+        setStage(2);
+        section.current?.scrollIntoView({
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "instant"
+            : "smooth",
+          block: "start",
+        });
+      }, 1800);
+      return () => clearTimeout(t);
+    }
+  }, [
+    active?.id,
+    network.demo.latest_run,
+    follow,
+    searchFinished,
+    searchNeeded,
+    facility,
+    sid,
+  ]);
+  useEffect(() => {
+    if (stage === 2 && !searchNeeded) setStage(1);
+    if (stage === 3 && !canApprove) setStage(1);
+  }, [searchNeeded, canApprove, stage]);
   return (
-    <>
-      <Card
-        title="Hospital in control"
-        sub="Analysis is scoped to this hospital. Partners appear only as candidates or counterparties; their agents still use their own imported histories and forecasts."
-      >
+    <div className="simple-operations">
+      <div className="operations-toolbar">
         <label>
-          Controlled hospital
+          Hospital
           <select
             aria-label="Controlled hospital"
             value={facility}
             onChange={(e) => {
+              latestRun.current = network.demo.latest_run;
               setFacility(e.target.value);
-              setReveal(false);
+              setStage(1);
+              setShowMap(false);
             }}
           >
-            {network.facilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
+            {network.facilities.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
               </option>
             ))}
           </select>
         </label>
-      </Card>
-      <div className="console-intro">
+        <div>
+          <Button
+            disabled={busy || !!active || !f}
+            onClick={async () => {
+              setStage(1);
+              await act("/analysis-runs", { force: true });
+            }}
+          >
+            {active ? "Calculating…" : "Refresh forecast"}
+          </Button>
+          <small>
+            Reruns demand prediction, then reassesses current stock and reports.
+          </small>
+        </div>
+      </div>
+      <div className="product-overview" aria-label="Product forecasts">
+        {network.supplies.map((s) => {
+          const risk = risks.find(
+            (r) => r.facility_id === facility && r.supply_id === s.id,
+          );
+          const decision =
+            network.allocation?.searches?.[facility + ":" + s.id];
+          return (
+            <button
+              key={s.id}
+              aria-label={"View " + s.name}
+              aria-pressed={sid === s.id}
+              className={sid === s.id ? "selected" : ""}
+              onClick={() => {
+                latestRun.current = network.demo.latest_run;
+                setSid(s.id);
+                setStage(1);
+                setShowMap(false);
+              }}
+            >
+              <strong>{s.name}</strong>
+              <span>
+                {risk
+                  ? fmt(risk.demand_7) + " " + s.unit + "s expected in 7 days"
+                  : "Awaiting hospital CSV"}
+              </span>
+              <small>
+                {risk
+                  ? fmt(risk.stock) +
+                    " usable · " +
+                    (risk.stockout_days === null
+                      ? "28 days covered"
+                      : days(risk.stockout_days) + " until shortage")
+                  : "No forecast yet"}
+              </small>
+              <Badge
+                tone={
+                  decision?.kind === "none"
+                    ? "green"
+                    : decision
+                      ? "amber"
+                      : "neutral"
+                }
+              >
+                {decision?.kind === "donor_search"
+                  ? "Shortage"
+                  : decision?.kind === "recipient_search"
+                    ? "Unused expiring stock"
+                    : decision
+                      ? "No action needed"
+                      : "Not analysed"}
+              </Badge>
+            </button>
+          );
+        })}
+      </div>
+      <nav className="simple-steps" aria-label="Workflow stages">
+        <button
+          aria-current={stage === 1 ? "step" : undefined}
+          onClick={() => setStage(1)}
+        >
+          <span>1</span>Forecast
+        </button>
+        <button
+          disabled={!searchFinished || !!active}
+          aria-current={stage === 2 ? "step" : undefined}
+          onClick={() => setStage(2)}
+        >
+          <span>2</span>
+          {gate?.kind === "recipient_search"
+            ? "Find a recipient"
+            : "Find a donor"}
+        </button>
+        <button
+          disabled={!canApprove || !!active}
+          aria-current={stage === 3 ? "step" : undefined}
+          onClick={() => setStage(3)}
+        >
+          <span>3</span>Approve & deliver
+        </button>
+      </nav>
+      <div className="workflow-hint">
         <p>
-          Make changes in a hospital dashboard. This view follows the resulting
-          jobs and explains the numbers; stages do not advance until their
-          backend events exist.
+          {active
+            ? "Recalculating. The previous completed forecast remains visible until the new result is ready."
+            : failed
+              ? "Analysis failed. Your previous results remain visible; retry Refresh forecast."
+              : gate?.kind === "none"
+                ? "No action needed. This product’s forecast does not warrant a search."
+                : gate?.kind === "donor_search"
+                  ? "A shortage is projected. The next stage checks eligible donors."
+                  : gate?.kind === "recipient_search"
+                    ? "Some stock will expire unused. The next stage checks who can consume it safely."
+                    : "Import this hospital’s CSV to begin."}
         </p>
         <label>
           <input
@@ -1442,8 +1475,164 @@ function Operations({
             checked={follow}
             onChange={(e) => setFollow(e.target.checked)}
           />{" "}
-          Follow actionable stages
+          Advance after an actionable refresh
         </label>
+      </div>
+      {failed && (
+        <p role="alert" className="text-red">
+          {failed.error}
+        </p>
+      )}
+      <div ref={section} className="simple-stage-content">
+        {stage === 1 && (
+          <>
+            <ForecastSummary
+              forecast={f}
+              risk={r}
+              supply={supply}
+              updating={!!active}
+            />
+            {f && (
+              <div className="next-action">
+                <strong>
+                  {active
+                    ? "Reassessing whether a search is needed…"
+                    : searchNeeded
+                      ? gate?.kind === "donor_search"
+                        ? "Next: find stock for the projected shortage."
+                        : "Next: find a hospital that can use the expiring stock."
+                      : "Analysis complete. No search is needed."}
+                </strong>
+                {searchNeeded && (
+                  <Button
+                    disabled={!searchFinished || !!active}
+                    onClick={() => setStage(2)}
+                  >
+                    View search results <ArrowRight size={15} />
+                  </Button>
+                )}
+                {!searchNeeded && canApprove && (
+                  <Button variant="outline" onClick={() => setStage(3)}>
+                    Review existing partner proposals
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {stage === 2 && (
+          <>
+            <Card
+              title={
+                gate?.kind === "recipient_search"
+                  ? "Who can use this stock?"
+                  : "Where can we safely get stock?"
+              }
+              sub={gate?.reason}
+            >
+              <div className="search-summary">
+                <span>
+                  Supply: <strong>{supply?.name}</strong>
+                </span>
+                <span>
+                  {gate?.kind === "recipient_search"
+                    ? "Unused expiring stock: "
+                    : "Projected unmet demand: "}
+                  <strong>
+                    {fmt(
+                      gate?.kind === "recipient_search"
+                        ? gate?.unused_expiring_units
+                        : gate?.shortage_units,
+                    )}{" "}
+                    {supply?.unit}s
+                  </strong>
+                </span>
+              </div>
+              {offers.length ? (
+                <div className="candidate-list">
+                  {offers.map((n) => (
+                    <article key={n.id}>
+                      <div>
+                        <strong>
+                          {NAME[n.donor]} → {NAME[n.recipient]}
+                        </strong>
+                        <p>{n.reason}</p>
+                      </div>
+                      <b>
+                        {fmt(n.quantity)} {supply?.unit}s
+                      </b>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>
+                  No safe match was found. No negotiation or inventory movement
+                  has been invented.
+                </p>
+              )}
+              <details>
+                <summary>Why were other candidates excluded?</summary>
+                {network.allocation?.rejected
+                  .filter((x) => x.supply_id === sid)
+                  .map((x, i) => (
+                    <p key={i}>
+                      <strong>{NAME[x.facility_id]}</strong>: {x.reason}
+                    </p>
+                  ))}
+              </details>
+              <Button variant="ghost" onClick={() => setShowMap(!showMap)}>
+                {showMap ? "Hide outbreak map" : "Show outbreak checks and map"}
+              </Button>
+              {showMap && <NetworkMap data={network} supply={sid} />}
+            </Card>
+            <div className="next-action">
+              <strong>
+                {canApprove
+                  ? "A proposal is available for hospital review."
+                  : "Search complete. No feasible transfer to approve."}
+              </strong>
+              {canApprove && (
+                <Button onClick={() => setStage(3)}>
+                  Review negotiation <ArrowRight size={15} />
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+        {stage === 3 && (
+          <>
+            <div className="notice notice-info">
+              Approve from each hospital’s dashboard. This console can show the
+              conversation and simulate delivery; it cannot approve on a
+              hospital’s behalf.
+            </div>
+            <Approvals data={data} actor="judge" act={act} busy={busy} />
+            <Deliveries data={data} actor="judge" act={act} busy={busy} />
+            <p>
+              <Badge tone={network.reconciliation?.balanced ? "green" : "red"}>
+                {network.reconciliation?.balanced
+                  ? "Ledger balanced"
+                  : "Review ledger"}
+              </Badge>
+            </p>
+          </>
+        )}
+      </div>
+      <details className="operations-tools">
+        <summary>Demo tools & downloads</summary>
+        <div className="file-downloads">
+          {[
+            "observations",
+            "forecasts",
+            "allocation",
+            "evaluation",
+            "movements",
+          ].map((kind) => (
+            <a key={kind} href={exportUrl(kind, "judge")}>
+              {kind} ↓
+            </a>
+          ))}
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -1451,7 +1640,7 @@ function Operations({
           onClick={() => {
             if (
               confirm(
-                "Reset all synthetic transfers and reports? Kaveri will return to empty onboarding; the two partner CSVs will be preloaded.",
+                "Reset the synthetic demo? This clears reports, approvals, transfers and logins.",
               )
             )
               act("/demo/onboarding-reset");
@@ -1459,253 +1648,7 @@ function Operations({
         >
           Reset onboarding demo
         </Button>
-      </div>
-      {labels.map((label, i) => (
-        <div
-          className={"console-stage " + (done[i] ? "done" : "")}
-          key={label}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-        >
-          <div className="console-stage-title">
-            <span>{done[i] ? "✓" : i + 1}</span>
-            <h2>{label}</h2>
-            <Badge tone={done[i] ? "green" : "neutral"}>
-              {done[i] ? "Backend result available" : "Waiting"}
-            </Badge>
-          </div>
-          {i === 0 && (
-            <Card title="Changes driving this analysis">
-              <p>
-                Run {run?.slice(0, 8) || "pending"} · scenario{" "}
-                {data.demo.as_of.slice(0, 10)}. Imported facts enter the
-                facility knowledge layer; numerical stock and approvals stay in
-                SQLite.
-              </p>
-              {data.events
-                .filter((e) =>
-                  [
-                    "INVENTORY_UPDATED",
-                    "REPORT_SUBMITTED",
-                    "HOSPITAL_ONBOARDED",
-                    "KNOWLEDGE_UPDATED",
-                  ].includes(e.type),
-                )
-                .slice(-5)
-                .reverse()
-                .map((e) => (
-                  <details key={e.id}>
-                    <summary>
-                      {new Date(e.at).toLocaleTimeString()} · {e.type} ·{" "}
-                      {e.facilities.join(", ")}
-                    </summary>
-                    <pre>{JSON.stringify(e.details, null, 2)}</pre>
-                  </details>
-                ))}
-              {active && (
-                <p>
-                  Worker {active.status}. Historical demand is never replaced by
-                  manual stock reductions.
-                </p>
-              )}
-              {data.jobs
-                .filter((j) => j.status === "failed")
-                .slice(-1)
-                .map((j) => (
-                  <p role="alert" className="text-red" key={j.id}>
-                    {j.error}
-                  </p>
-                ))}
-            </Card>
-          )}
-          {i === 1 && (
-            <>
-              {data.forecasts.length ? (
-                data.forecasts.map((f) => (
-                  <Forecasts
-                    key={f.id}
-                    data={{
-                      ...data,
-                      forecasts: [f],
-                      risks: data.risks.filter(
-                        (r) => r.supply_id === f.supply_id,
-                      ),
-                    }}
-                  />
-                ))
-              ) : (
-                <Card title="Awaiting hospital onboarding">
-                  <p>
-                    Import this hospital’s CSV to start product forecasts.
-                    Partner forecasts are not substituted.
-                  </p>
-                </Card>
-              )}
-            </>
-          )}{" "}
-          {i === 2 && (
-            <>
-              <Card title="Product-by-product search decisions">
-                {searchRows.map((s) => (
-                  <article className="agent-message" key={s.supply_id}>
-                    <strong>
-                      {data.supplies.find((p) => p.id === s.supply_id)?.name}
-                    </strong>
-                    <p>
-                      <Badge tone={s.kind === "none" ? "green" : "amber"}>
-                        {s.kind === "none"
-                          ? "No search"
-                          : s.kind === "donor_search"
-                            ? "Find a donor"
-                            : "Find a recipient"}
-                      </Badge>{" "}
-                      {s.reason}
-                    </p>
-                    <small>
-                      Projected unmet: {fmt(s.shortage_units)} units · unused
-                      expiring packs: {fmt(s.unused_expiring_units)} units
-                    </small>
-                  </article>
-                ))}
-                {!searchRows.length && (
-                  <p>Waiting for this hospital’s forecast assessment.</p>
-                )}
-              </Card>
-              <Card
-                title="Search evidence for the selected product"
-                sub="Reported or detected signals exclude inside-zone hospitals from automatic donation. For this demo, search tries the nearest eligible donor first."
-              >
-                <select
-                  aria-label="Map supply"
-                  value={supply}
-                  onChange={(e) => setSupply(e.target.value)}
-                >
-                  {data.supplies.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedSearch && selectedSearch.kind !== "none" ? (
-                  <NetworkMap data={data} supply={supply} />
-                ) : (
-                  <p>
-                    No pack-sized actionable shortage or transferable expiry
-                    surplus is projected for this product.
-                  </p>
-                )}
-                {selectedSearch?.kind !== "none" &&
-                  data.incidents
-                    .filter((x) => x.supply_id === supply)
-                    .map((x) => (
-                      <p key={x.id}>
-                        <Badge tone="red">{x.status}</Badge>{" "}
-                        {x.facilities.map((f) => NAME[f]).join(" + ")} ·{" "}
-                        {x.radius_km} km operational radius
-                      </p>
-                    ))}
-              </Card>
-              <Card
-                title={
-                  selectedSearch?.kind === "recipient_search"
-                    ? "Recipient checks & expiry rescue"
-                    : "Donor checks & remaining gap"
-                }
-              >
-                {selectedSearch &&
-                  selectedSearch.kind !== "none" &&
-                  data.allocation?.rejected
-                    .filter((r) => r.supply_id === supply)
-                    .map((r, i) => (
-                      <p key={i}>
-                        <strong>{NAME[r.facility_id]}</strong> — {r.reason}
-                      </p>
-                    ))}
-                {data.allocation?.deficits
-                  .filter((r) => r.supply_id === supply)
-                  .map((r, i) => (
-                    <p key={i}>
-                      {NAME[r.facility_id]}: {fmt(r.unmet)} unmet units.{" "}
-                      {r.action}
-                    </p>
-                  ))}
-                {!data.allocation && <p>Waiting for allocation results.</p>}
-              </Card>
-            </>
-          )}{" "}
-          {i === 3 && (
-            <Approvals data={data} actor="judge" act={act} busy={busy} />
-          )}{" "}
-          {i === 4 && (
-            <Card title="Administrators retain the decision">
-              <p>
-                Log into the requesting hospital and the selected donor. In
-                Approvals, each administrator approves identical terms. Changing
-                quantities clears previous approvals. The console cannot approve
-                for a hospital.
-              </p>
-              {data.transfers.map((t) => (
-                <p key={t.id}>
-                  {NAME[t.donor]} → {NAME[t.recipient]} · {t.quantity}{" "}
-                  {t.supply_id} · {t.status}
-                </p>
-              ))}
-            </Card>
-          )}
-          {i === 5 && (
-            <>
-              <Deliveries data={data} actor="judge" act={act} busy={busy} />
-              <Card title="Verify the outcome">
-                <p>
-                  <Badge tone={data.reconciliation?.balanced ? "green" : "red"}>
-                    {data.reconciliation?.balanced
-                      ? "Ledger balanced"
-                      : "Check ledger"}
-                  </Badge>
-                </p>
-                <Button variant="outline" onClick={() => setReveal(!reveal)}>
-                  {reveal
-                    ? "Show projected outcomes"
-                    : "Reveal simulated outcomes"}
-                </Button>
-                <p>{outcomes.data?.basis}</p>
-                <div className="trio-math">
-                  <span>
-                    <small>Unmet units without transfers</small>
-                    <strong>{fmt(outcomes.data?.without.unmet_units)}</strong>
-                  </span>
-                  <span>
-                    <small>Unmet units with transfers</small>
-                    <strong>{fmt(outcomes.data?.with.unmet_units)}</strong>
-                  </span>
-                  <span>
-                    <small>Expiry without / with</small>
-                    <strong>
-                      {fmt(outcomes.data?.without.expiry_units)} /{" "}
-                      {fmt(outcomes.data?.with.expiry_units)}
-                    </strong>
-                  </span>
-                </div>
-                <div className="file-downloads">
-                  {[
-                    "inventory",
-                    "observations",
-                    "forecasts",
-                    "allocation",
-                    "evaluation",
-                    "movements",
-                  ].map((k) => (
-                    <a key={k} href={exportUrl(k, "judge")}>
-                      {k} ↓
-                    </a>
-                  ))}
-                </div>
-              </Card>
-            </>
-          )}
-        </div>
-      ))}
-    </>
+      </details>
+    </div>
   );
 }

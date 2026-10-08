@@ -202,6 +202,7 @@ export type Snapshot = {
     };
   } | null;
   allocation: {
+    risks?: Record<string, Risk>;
     searches?: Record<
       string,
       {
