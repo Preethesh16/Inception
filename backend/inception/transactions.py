@@ -174,6 +174,25 @@ def verify(state, n, reserved=False):
     result = simulate(
         batches_for(working, n["recipient"], n["supply_id"]), fc["planning"], as_of, arrivals, incoming
     )
+    if n.get("purpose") == "expiry_rescue":
+        donor_fc = working["forecasts"][f"{n['donor']}:{n['supply_id']}"]
+        donor_before = simulate(
+            batches_for(working, n["donor"], n["supply_id"]),
+            donor_fc["planning"],
+            as_of,
+            arrivals_for(working, n["donor"], n["supply_id"]),
+        )
+        require(
+            all(donor_before["batch_waste"].get(bid, 0) >= qty - 1e-6 for bid, qty in removals.items()),
+            "Donor now needs this expiring stock locally; reassess the expiry rescue",
+        )
+        recipient_before = simulate(
+            batches_for(working, n["recipient"], n["supply_id"]), fc["planning"], as_of, arrivals
+        )
+        require(
+            result["waste"] <= recipient_before["waste"] + 1e-6,
+            "Transfer would shift expiry waste to the recipient",
+        )
     require(
         all(result["consumed"].get(a["id"], 0) >= a["quantity"] - 1e-6 for a in incoming),
         "Recipient cannot consume the offered batch before expiry",

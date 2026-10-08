@@ -202,6 +202,17 @@ export type Snapshot = {
     };
   } | null;
   allocation: {
+    searches?: Record<
+      string,
+      {
+        facility_id: string;
+        supply_id: string;
+        kind: string;
+        reason: string;
+        shortage_units: number;
+        unused_expiring_units: number;
+      }
+    >;
     rejected: { facility_id: string; supply_id: string; reason: string }[];
     deficits: {
       facility_id: string;

@@ -331,9 +331,16 @@ def donor_safe(state, fid, sid, removals):
 def allocate(state):
     as_of = state["settings"]["demo"]["as_of"]
     risks = {key: risk_for(state, fc) for key, fc in state["forecasts"].items()}
+    from .redistribution import search_decisions, expiry_matches
+
+    searches = search_decisions(state, risks)
     moves, rejected, deficits = [], [], []
     for sid, supply in state["supplies"].items():
-        recipients = [r for r in risks.values() if r["supply_id"] == sid and r["stockout_days"] is not None]
+        recipients = [
+            r for r in risks.values() if r["supply_id"] == sid and searches[r["id"]]["kind"] == "donor_search"
+        ]
+        if not recipients:
+            continue
         incoming = {r["facility_id"]: [] for r in recipients}
         removed = {}
         candidates = []
@@ -459,6 +466,7 @@ def allocate(state):
                 )
                 if match is None:
                     match = {
+                        "purpose": "shortage",
                         "donor": b["facility_id"],
                         "recipient": fid,
                         "supply_id": sid,
@@ -504,6 +512,9 @@ def allocate(state):
                     else "Covered within evaluated horizon",
                 }
             )
+    expiry_moves, expiry_rejected = expiry_matches(state, risks, searches, moves)
+    moves.extend(expiry_moves)
+    rejected.extend(expiry_rejected)
     # Each offer shows its own incremental effect, not the benefit of unrelated unapproved offers.
     for move in moves:
         fid, sid = move["recipient"], move["supply_id"]
@@ -525,4 +536,30 @@ def allocate(state):
         )
         move["after"] = own["stockout_days"]
         move["remaining_unmet"] = own["unmet"]
-    return {"moves": moves, "rejected": rejected, "deficits": deficits, "risks": risks}
+    for deficit in deficits:
+        fid, sid = deficit["facility_id"], deficit["supply_id"]
+        planned = [
+            {
+                "id": f"final-{index}-{line['batch_id']}",
+                "quantity": line["quantity"],
+                "expires_at": state["batches"][line["batch_id"]]["expires_at"],
+                "arrives_at": m["eta"],
+            }
+            for index, m in enumerate(moves)
+            if m["recipient"] == fid and m["supply_id"] == sid
+            for line in m["lines"]
+        ]
+        final = simulate(
+            batches_for(state, fid, sid),
+            state["forecasts"][f"{fid}:{sid}"]["planning"],
+            as_of,
+            arrivals_for(state, fid, sid),
+            planned,
+        )
+        deficit.update(
+            unmet=round(final["unmet"]),
+            action="Expedite procurement for residual deficit"
+            if final["unmet"]
+            else "Covered within evaluated horizon",
+        )
+    return {"moves": moves, "rejected": rejected, "deficits": deficits, "risks": risks, "searches": searches}

@@ -1626,6 +1626,7 @@ export interface operations {
         parameters: {
             query?: {
                 reveal?: boolean;
+                facility?: string | null;
                 session?: string | null;
             };
             header?: {

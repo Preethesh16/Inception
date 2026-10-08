@@ -54,6 +54,22 @@ def context(state, actor):
         "facility_id": actor,
         "cutoff": state["settings"]["demo"]["as_of"],
         "risks": own,
+        "forecast_evidence": [
+            {
+                "facility_id": f["facility_id"],
+                "supply_id": f["supply_id"],
+                "run_id": f["run_id"],
+                "model": f["model"],
+                "cutoff": f["cutoff"],
+                "history": f["history"][-14:],
+                "planning_7": f["planning"][:7],
+                "raw_7": f["p50"][:7],
+                "source": f["source"],
+                "input_hash": f["input_hash"],
+            }
+            for f in state["forecasts"].values()
+            if actor == "judge" or f["facility_id"] == actor
+        ],
         "offers": offers,
         "policy_version": "1.0",
         "profile": state["facilities"].get(actor),

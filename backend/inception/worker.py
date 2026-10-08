@@ -77,8 +77,19 @@ def run_job(store, job):
                 },
                 run_id=run_id,
             )
+            for key, decision in result["searches"].items():
+                emit(
+                    current,
+                    "SEARCH_SKIPPED" if decision["kind"] == "none" else "SEARCH_COMPLETED",
+                    decision,
+                    [decision["facility_id"]],
+                    run_id,
+                    key,
+                )
             previous_run = current["runs"].get(current["settings"]["demo"].get("latest_run"), {})
-            unchanged = previous_run.get("revision") == revision
+            unchanged = previous_run.get("revision") == revision and "searches" in current["allocations"].get(
+                previous_run.get("id"), {}
+            )
             for old in [] if unchanged else current["negotiations"].values():
                 if old["status"] in ("Awaiting approvals", "Negotiating", "Proposed"):
                     old["status"] = "Needs re-evaluation"
@@ -104,13 +115,17 @@ def run_job(store, job):
                     {
                         "actor": move["recipient"],
                         "type": "request",
-                        "quantity": int(
+                        "quantity": move["quantity"]
+                        if move.get("purpose") == "expiry_rescue"
+                        else int(
                             math.ceil(
                                 move["before_unmet"] / current["supplies"][move["supply_id"]]["pack_size"]
                             )
                             * current["supplies"][move["supply_id"]]["pack_size"]
                         ),
-                        "text": f"Forecasted unmet demand is {move['before_unmet']:.0f} units. Request support for forecasted shortage. {move['reason']}",
+                        "text": f"Forecast-supported expiry rescue for {move['quantity']} units. {move['reason']}"
+                        if move.get("purpose") == "expiry_rescue"
+                        else f"Forecasted unmet demand is {move['before_unmet']:.0f} units. Request support for forecasted shortage. {move['reason']}",
                         "at": now(),
                     },
                     {
@@ -121,6 +136,17 @@ def run_job(store, job):
                         "at": now(),
                     },
                 ]
+                if move.get("purpose") == "expiry_rescue":
+                    n["messages"][0].update(
+                        actor=move["donor"],
+                        type="expiry offer",
+                        text=f"Offer {move['quantity']} units projected to expire unused locally. Donor stress demand and reserve remain protected.",
+                    )
+                    n["messages"][1].update(
+                        actor=move["recipient"],
+                        type="consumption check",
+                        text=f"Our own history-based planning forecast can consume these {move['quantity']} units before expiry without increasing waste. This is an expiry-rescue proposal, not a claim of shortage. Administrator approval is required.",
+                    )
                 current["negotiations"][id] = n
                 emit(
                     current,

@@ -281,7 +281,9 @@ export default function TrioApp() {
         <div className="sidebar-bottom">
           <a
             href={
-              consoleMode ? "http://localhost:5173" : "http://localhost:5174"
+              consoleMode
+                ? "http://localhost:5173"
+                : "http://localhost:5174/?hospital=" + actor
             }
             target="_blank"
             rel="noreferrer"
@@ -1097,7 +1099,7 @@ function Proposal({
   const [quantity, setQuantity] = useState(n.quantity);
   const [explanation, setExplanation] = useState("");
   return (
-    <article className="trio-proposal">
+    <article className="trio-proposal" data-proposal-id={n.id}>
       <div className="entry-top">
         <h3>
           {NAME[n.donor]} → {NAME[n.recipient]}
@@ -1299,7 +1301,7 @@ function Deliveries({
   );
 }
 function Operations({
-  data,
+  data: network,
   act,
   busy,
 }: {
@@ -1307,8 +1309,39 @@ function Operations({
   act: (p: string, b?: unknown) => Promise<boolean>;
   busy: boolean;
 }) {
+  const [facility, setFacility] = useState(
+    new URLSearchParams(location.search).get("hospital") || "A",
+  );
+  const data: Snapshot = {
+    ...network,
+    forecasts: network.forecasts.filter((f) => f.facility_id === facility),
+    risks: network.risks.filter((r) => r.facility_id === facility),
+    inventory: network.inventory.filter((b) => b.facility_id === facility),
+    negotiations: network.negotiations.filter(
+      (n) => n.donor === facility || n.recipient === facility,
+    ),
+    transfers: network.transfers.filter(
+      (n) => n.donor === facility || n.recipient === facility,
+    ),
+    events: network.events.filter(
+      (e) => e.facilities.length === 0 || e.facilities.includes(facility),
+    ),
+    allocation: network.allocation
+      ? {
+          ...network.allocation,
+          deficits: network.allocation.deficits.filter(
+            (r) => r.facility_id === facility,
+          ),
+        }
+      : null,
+  };
+  const searchRows = Object.values(network.allocation?.searches || {}).filter(
+    (s) => s.facility_id === facility,
+  );
+  const shouldSearch = searchRows.some((s) => s.kind !== "none");
   const [follow, setFollow] = useState(true);
   const [supply, setSupply] = useState("ORS");
+  const selectedSearch = searchRows.find((s) => s.supply_id === supply);
   const [reveal, setReveal] = useState(false);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const previous = useRef("");
@@ -1334,13 +1367,16 @@ function Operations({
   const done = [
     events.some((e) => e.type === "ANALYSIS_STARTED"),
     events.some((e) => e.type === "FORECAST_COMPLETED"),
-    events.some((e) => e.type === "ALLOCATION_CREATED"),
+    shouldSearch &&
+      events.some(
+        (e) => e.type === "SEARCH_COMPLETED" && e.facilities.includes(facility),
+      ),
     transferEvents.some((e) => e.type === "APPROVAL_REQUIRED"),
     transferEvents.some((e) => e.type === "TRANSFER_RESERVED"),
     transferEvents.some((e) => e.type === "RECEIVED"),
   ];
   const latest = done.lastIndexOf(true);
-  const change = run + ":" + latest;
+  const change = facility + ":" + run + ":" + latest;
   useEffect(() => {
     if (follow && previous.current !== change && latest >= 0) {
       refs.current[Math.min(latest + 1, 5)]?.scrollIntoView({
@@ -1353,25 +1389,47 @@ function Operations({
     }
   }, [change, latest, follow]);
   const outcomes = useQuery({
-    queryKey: ["trio-outcomes", data.demo.revision, reveal],
+    queryKey: ["trio-outcomes", facility, data.demo.revision, reveal],
     queryFn: () =>
       api<{
         basis: string;
         with: { unmet_units: number; expiry_units: number };
         without: { unmet_units: number; expiry_units: number };
-      }>("/demo/outcomes?reveal=" + reveal, "judge"),
+      }>("/demo/outcomes?reveal=" + reveal + "&facility=" + facility, "judge"),
     enabled: !!data.forecasts.length,
   });
   const labels = [
     "Evidence received",
     "Demand & stock-risk analysis",
-    "Outbreak check & donor search",
+    "Forecast-gated redistribution search",
     "Hospital agent negotiation",
     "Dual approval & reservation",
     "Delivery & measured outcome",
   ];
   return (
     <>
+      <Card
+        title="Hospital in control"
+        sub="Analysis is scoped to this hospital. Partners appear only as candidates or counterparties; their agents still use their own imported histories and forecasts."
+      >
+        <label>
+          Controlled hospital
+          <select
+            aria-label="Controlled hospital"
+            value={facility}
+            onChange={(e) => {
+              setFacility(e.target.value);
+              setReveal(false);
+            }}
+          >
+            {network.facilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Card>
       <div className="console-intro">
         <p>
           Make changes in a hospital dashboard. This view follows the resulting
@@ -1461,11 +1519,61 @@ function Operations({
                 ))}
             </Card>
           )}
-          {i === 1 && <Forecasts data={data} />}{" "}
+          {i === 1 && (
+            <>
+              {data.forecasts.length ? (
+                data.forecasts.map((f) => (
+                  <Forecasts
+                    key={f.id}
+                    data={{
+                      ...data,
+                      forecasts: [f],
+                      risks: data.risks.filter(
+                        (r) => r.supply_id === f.supply_id,
+                      ),
+                    }}
+                  />
+                ))
+              ) : (
+                <Card title="Awaiting hospital onboarding">
+                  <p>
+                    Import this hospital’s CSV to start product forecasts.
+                    Partner forecasts are not substituted.
+                  </p>
+                </Card>
+              )}
+            </>
+          )}{" "}
           {i === 2 && (
             <>
+              <Card title="Product-by-product search decisions">
+                {searchRows.map((s) => (
+                  <article className="agent-message" key={s.supply_id}>
+                    <strong>
+                      {data.supplies.find((p) => p.id === s.supply_id)?.name}
+                    </strong>
+                    <p>
+                      <Badge tone={s.kind === "none" ? "green" : "amber"}>
+                        {s.kind === "none"
+                          ? "No search"
+                          : s.kind === "donor_search"
+                            ? "Find a donor"
+                            : "Find a recipient"}
+                      </Badge>{" "}
+                      {s.reason}
+                    </p>
+                    <small>
+                      Projected unmet: {fmt(s.shortage_units)} units · unused
+                      expiring packs: {fmt(s.unused_expiring_units)} units
+                    </small>
+                  </article>
+                ))}
+                {!searchRows.length && (
+                  <p>Waiting for this hospital’s forecast assessment.</p>
+                )}
+              </Card>
               <Card
-                title="Check the operational planning zone"
+                title="Search evidence for the selected product"
                 sub="Reported or detected signals exclude inside-zone hospitals from automatic donation. For this demo, search tries the nearest eligible donor first."
               >
                 <select
@@ -1479,25 +1587,41 @@ function Operations({
                     </option>
                   ))}
                 </select>
-                <NetworkMap data={data} supply={supply} />
-                {data.incidents
-                  .filter((x) => x.supply_id === supply)
-                  .map((x) => (
-                    <p key={x.id}>
-                      <Badge tone="red">{x.status}</Badge>{" "}
-                      {x.facilities.map((f) => NAME[f]).join(" + ")} ·{" "}
-                      {x.radius_km} km operational radius
-                    </p>
-                  ))}
+                {selectedSearch && selectedSearch.kind !== "none" ? (
+                  <NetworkMap data={data} supply={supply} />
+                ) : (
+                  <p>
+                    No pack-sized actionable shortage or transferable expiry
+                    surplus is projected for this product.
+                  </p>
+                )}
+                {selectedSearch?.kind !== "none" &&
+                  data.incidents
+                    .filter((x) => x.supply_id === supply)
+                    .map((x) => (
+                      <p key={x.id}>
+                        <Badge tone="red">{x.status}</Badge>{" "}
+                        {x.facilities.map((f) => NAME[f]).join(" + ")} ·{" "}
+                        {x.radius_km} km operational radius
+                      </p>
+                    ))}
               </Card>
-              <Card title="Donor checks & remaining gap">
-                {data.allocation?.rejected
-                  .filter((r) => r.supply_id === supply)
-                  .map((r, i) => (
-                    <p key={i}>
-                      <strong>{NAME[r.facility_id]}</strong> — {r.reason}
-                    </p>
-                  ))}
+              <Card
+                title={
+                  selectedSearch?.kind === "recipient_search"
+                    ? "Recipient checks & expiry rescue"
+                    : "Donor checks & remaining gap"
+                }
+              >
+                {selectedSearch &&
+                  selectedSearch.kind !== "none" &&
+                  data.allocation?.rejected
+                    .filter((r) => r.supply_id === supply)
+                    .map((r, i) => (
+                      <p key={i}>
+                        <strong>{NAME[r.facility_id]}</strong> — {r.reason}
+                      </p>
+                    ))}
                 {data.allocation?.deficits
                   .filter((r) => r.supply_id === supply)
                   .map((r, i) => (

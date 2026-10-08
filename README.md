@@ -132,3 +132,7 @@ The three-hospital flow supersedes the earlier two-hospital and scenario-button 
 Demand forecasts refresh every five minutes and after data changes. Cache provenance remains visible. Unchanged refreshes preserve current approvals. Hospital facts from the CSV enter source-linked knowledge; numerical policy enforcement remains in typed code.
 
 No additional paid service is required for the deterministic local demonstration. Live OpenAI calls and CARTO tile rendering need their optional keys and external verification. This is a local hackathon prototype: production authentication, real hospital feeds, real courier dispatch and public deployment remain outside its scope.
+
+### Search triggers and console scope
+
+Search is forecast-gated per facility and supply. Pack-sized unmet demand triggers donor search; genuinely unused expiring stock triggers recipient search, preserving protected donor demand and requiring recipient consumption before expiry. No actionable risk means no search. Partner agents use their own imported history and forecast evidence. The console selects one controlled hospital and shows each of its products separately.

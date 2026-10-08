@@ -2,7 +2,7 @@
 
 Measured in this workspace on 2026-10-08.
 
-- **36 backend tests passed**: rubric arithmetic, FEFO expiry, fractional arrival timing, missing-data handling, no future leakage, anomaly clustering, competing recipients, donor protection, no-donor escalation, role scope, CSV atomicity, counteroffer caps, approval versioning, duplicate receipts, concurrent reservation, cancellation, expiry cleanup, structured OpenAI tool-loop mock, and forced inference request.
+- **41 backend tests passed**: rubric arithmetic, FEFO expiry, fractional arrival timing, missing-data handling, no future leakage, anomaly clustering, competing recipients, donor protection, no-donor escalation, role scope, CSV atomicity, counteroffer caps, approval versioning, duplicate receipts, concurrent reservation, cancellation, expiry cleanup, structured OpenAI tool-loop mock, and forced inference request.
 - **Browser transfer acceptance passed** on both ports: report, rejected over-limit counteroffer, buyer approval, donor approval, courier claim/pickup/transit/receipt, balanced ledger, dataset download, outcome replay.
 - **390 px mobile check passed** after correcting action-button wrapping; no page-level horizontal overflow.
 - **Production frontend build passed**, with chart/map/workflow code split into separate chunks.
@@ -25,3 +25,7 @@ These tests are small synthetic scenarios, not clinical validation or evidence o
 ## Three-hospital acceptance (current interface)
 
 The browser journey verifies single-file Kaveri onboarding, stock edits, a nearby Chamundi offer, reports at both adjacent hospitals, donor rerouting to Mandya, rejected over-limit counteroffer, two hospital approvals, courier receipt, all six backend-driven stages, a balanced ledger and grounded chat. Backend tests additionally cover atomic bundle rejection, scoped login and knowledge, expiry-change idempotency and refusing edits to reserved stock.
+
+## Forecast-gated redistribution and scoped console
+
+Four browser tests pass: the complete three-hospital transfer, mobile layout, expiry edits, and controlled-hospital scoping across all three product charts. Backend coverage includes no search for adequate stock, no expiry search when a batch is needed locally, forecast-supported expiry rescue without a recipient shortage, rejection when recipient demand is absent, and persisted per-hospital search/skipped events.

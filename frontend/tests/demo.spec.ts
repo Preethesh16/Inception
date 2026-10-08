@@ -107,7 +107,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     ),
   ).toBe(false);
   await page.getByRole("button", { name: "Approvals", exact: true }).click();
-  const proposal = page.locator(".trio-proposal").filter({ hasText: n.id });
+  const proposal = page.locator(`[data-proposal-id="${n.id}"]`);
   await proposal
     .getByLabel("Counteroffer " + n.id)
     .fill(String(n.max_quantity + 10));
@@ -123,9 +123,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   const donor = await context.newPage();
   await login(donor, "D");
   await donor.getByRole("button", { name: "Approvals", exact: true }).click();
-  const donorProposal = donor
-    .locator(".trio-proposal")
-    .filter({ hasText: n.id });
+  const donorProposal = donor.locator(`[data-proposal-id="${n.id}"]`);
   await donorProposal
     .getByRole("button", { name: "Approve transfer", exact: true })
     .click();
@@ -210,4 +208,35 @@ test("expiry edits update batch dates and trigger analysis", async ({
     ),
   ).toBe(true);
   expect(state.reconciliation.balanced).toBe(true);
+});
+
+test("console shows only the controlled hospital and all its products", async ({
+  page,
+  request,
+}) => {
+  await request.post("/api/demo/onboarding-reset", { headers });
+  await waitAnalysis(request, 6);
+  await page.goto("http://localhost:5174/?hospital=A");
+  await expect(
+    page.getByText("Awaiting hospital onboarding", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Forecast series")).toHaveCount(0);
+  await page.getByLabel("Controlled hospital").selectOption("D");
+  await expect(page.getByLabel("Forecast series")).toHaveCount(3);
+  const labels = await page.getByLabel("Forecast series").allTextContents();
+  expect(
+    labels.every(
+      (s) => s.includes("Mandya Regional Hospital") && !s.includes("Chamundi"),
+    ),
+  ).toBe(true);
+  await expect(
+    page.getByText("Product-by-product search decisions", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Controlled hospital").selectOption("B");
+  await expect(page.getByLabel("Forecast series")).toHaveCount(3);
+  expect(
+    (await page.getByLabel("Forecast series").allTextContents()).every((s) =>
+      s.includes("Chamundi Community Hospital"),
+    ),
+  ).toBe(true);
 });

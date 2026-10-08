@@ -84,3 +84,11 @@ Use **Reset onboarding demo** in the console. It clears synthetic transactions, 
 - Local Chronos-2: no AWS key. Public model download needs internet on the first run.
 
 Edit `.env` and restart `make dev` after configuring keys. Live external calls still need verification with your credentials. The remainder of the local demo works without them.
+
+## Forecast-gated searches and focused console
+
+The console's **Controlled hospital** selector scopes product charts, evidence, proposals and outcomes to one hospital. Opening it from a hospital dashboard passes that hospital in the link. All of that hospital's products have a separate chart and a separate decision: **Find a donor**, **Find a recipient**, or **No search**. Partner forecasts still run from their own imported consumption histories; agents receive their own recent history, planning demand, input hash and model provenance.
+
+A donor search requires projected unmet demand of at least one supply pack within the 28-day supported horizon. A recipient search requires at least one whole pack of stock projected to expire unused locally, with no projected shortage at the donor. Expiry alone is not a trigger: stock needed locally is kept. An expiry-rescue recipient must consume the incoming stock before expiry without increasing its own waste. The donor's stress-demand protection, shelf-life margin, handling checks and outbreak exclusions still apply. If no recipient qualifies, the system explains why and does not create a proposal.
+
+Expiry-rescue transfers may serve a hospital whose stock is currently adequate: they use that hospital's forecast consumption to prevent waste, and do not claim the recipient has a shortage. Approvals revalidate local surplus and recipient use. No search or negotiation is started when neither trigger is present.

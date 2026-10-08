@@ -476,8 +476,12 @@ def advance_demo(body: Advance, who=Depends(judge)):
 
 
 @app.get("/demo/outcomes")
-def compare(reveal: bool = False, who=Depends(judge)):
-    return outcomes(store.read(), reveal)
+def compare(reveal: bool = False, facility: str | None = None, who=Depends(judge)):
+    s = store.read()
+    if facility:
+        require(facility in s["facilities"], "Unknown hospital", 404)
+        s["forecasts"] = {k: v for k, v in s["forecasts"].items() if v["facility_id"] == facility}
+    return {**outcomes(s, reveal), "facility_id": facility}
 
 
 @app.get("/evaluation")
