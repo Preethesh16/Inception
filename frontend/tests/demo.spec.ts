@@ -417,9 +417,13 @@ test("Hospital A logout empties its open console without affecting partners", as
   await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
   await expect(page.locator(".forecast-summary")).toHaveCount(1);
   const hospital = await context.newPage();
+  await hospital.setViewportSize({ width: 641, height: 738 });
   await login(hospital, "A");
+  const otherHospitalTab = await context.newPage();
+  await login(otherHospitalTab, "A");
   await hospital.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(hospital).toHaveURL("http://localhost:5173/");
+  await expect(otherHospitalTab).toHaveURL("http://localhost:5173/?login=A");
   await expect(
     page.getByText("No hospital data imported", { exact: true }),
   ).toBeVisible();

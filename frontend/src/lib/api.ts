@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
 export async function api<T>(
   path: string,
   actor: string,
@@ -16,7 +25,7 @@ export async function api<T>(
   });
   const result = await response.json();
   if (!response.ok)
-    throw new Error(
+    throw new ApiError(
       typeof result.detail === "string"
         ? result.detail +
             (result.errors
@@ -29,6 +38,7 @@ export async function api<T>(
                   .join("; ")
               : "")
         : JSON.stringify(result.detail),
+      response.status,
     );
   return result;
 }

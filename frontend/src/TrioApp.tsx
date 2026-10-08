@@ -14,7 +14,7 @@ import {
   Network,
   Download,
 } from "lucide-react";
-import { api, post, fmt, days, date, exportUrl } from "./lib/api";
+import { api, post, fmt, days, date, exportUrl, ApiError } from "./lib/api";
 import type { Snapshot, Batch, Negotiation } from "./lib/types";
 import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
@@ -229,6 +229,13 @@ export default function TrioApp() {
     enabled: authenticated,
     refetchInterval: 2000,
   });
+  const sessionExpired = q.error instanceof ApiError && q.error.status === 401;
+  useEffect(() => {
+    if (!consoleMode && sessionExpired) {
+      sessionStorage.removeItem("inception-session-" + actor);
+      location.replace("/?login=" + actor);
+    }
+  }, [sessionExpired, consoleMode, actor]);
   useEffect(() => {
     if (!authenticated) return;
     const es = new EventSource(fileUrl("/events/stream", actor));
@@ -259,7 +266,7 @@ export default function TrioApp() {
       setBusy(false);
     }
   }
-  const data = q.data;
+  const data = sessionExpired ? undefined : q.data;
   const running = data?.jobs.findLast((j) =>
     ["queued", "running"].includes(j.status),
   );
@@ -306,6 +313,24 @@ export default function TrioApp() {
           >
             {consoleMode ? "Hospital login" : "Operations console"} ↗
           </a>
+          <small>Local synthetic demonstration</small>
+        </div>
+      </aside>
+      <main className="trio-main">
+        <header className="trio-header">
+          <div>
+            <span className="eyebrow">
+              INCEPTION /{" "}
+              {consoleMode ? "LIVE WORKFLOW" : actor + " · HOSPITAL ADMIN"}
+            </span>
+            <h1>
+              {consoleMode
+                ? "Every decision, visible."
+                : tab === "Onboarding"
+                  ? "Your hospital. Your supplies."
+                  : tab}
+            </h1>
+          </div>
           {!consoleMode && (
             <Button
               variant="ghost"
@@ -332,24 +357,6 @@ export default function TrioApp() {
               Log out
             </Button>
           )}
-          <small>Local synthetic demonstration</small>
-        </div>
-      </aside>
-      <main className="trio-main">
-        <header className="trio-header">
-          <div>
-            <span className="eyebrow">
-              INCEPTION /{" "}
-              {consoleMode ? "LIVE WORKFLOW" : actor + " · HOSPITAL ADMIN"}
-            </span>
-            <h1>
-              {consoleMode
-                ? "Every decision, visible."
-                : tab === "Onboarding"
-                  ? "Your hospital. Your supplies."
-                  : tab}
-            </h1>
-          </div>
           {!consoleMode && (
             <Button
               variant="outline"
