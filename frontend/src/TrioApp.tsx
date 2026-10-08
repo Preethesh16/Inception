@@ -31,6 +31,15 @@ import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
 const HospitalNetwork = lazy(() => import("./components/HospitalNetwork"));
+const LoginScene = lazy(() => import("./components/LoginScene"));
+const REMEMBER_KEY = "inception-remember-email";
+function readRemembered() {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) || "";
+  } catch {
+    return "";
+  }
+}
 const EMAILS: Record<string, string> = {
   A: "admin@kaveri.demo",
   B: "admin@chamundi.demo",
@@ -104,8 +113,11 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
   // links and logout) opens it directly, prefilled for the linked hospital.
   const [open, setOpen] = useState(page === "login");
   const [email, setEmail] = useState(
-    () => EMAILS[new URLSearchParams(location.search).get("login") || ""] || "",
+    () =>
+      EMAILS[new URLSearchParams(location.search).get("login") || ""] ||
+      readRemembered(),
   );
+  const [remember, setRemember] = useState(() => !!readRemembered());
   function openLogin() {
     setOpen(true);
     if (location.pathname !== "/login")
@@ -140,6 +152,12 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
         { email: email.trim(), password },
       );
       sessionStorage.setItem("inception-session-" + r.facility_id, r.session);
+      try {
+        if (remember) localStorage.setItem(REMEMBER_KEY, email.trim());
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        /* storage unavailable: remembering is a convenience only */
+      }
       window.location.href =
         "/hospital/" +
         r.facility_id +
@@ -214,74 +232,109 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
               aria-modal="true"
               aria-labelledby="login-title"
             >
-              <button
-                type="button"
-                className="login-close"
-                aria-label="Close sign in"
-                onClick={closeLogin}
-              >
-                <X size={18} />
-              </button>
-              <div className="login-logo">
-                <Activity size={26} />
-              </div>
-              <h2 id="login-title">Sign in to your hospital</h2>
-              {logoutNotice && (
-                <p role="status" className="login-notice">
-                  {logoutNotice}
-                </p>
-              )}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  login();
-                }}
-              >
-                <input
-                  aria-label="Email"
-                  type="email"
-                  placeholder="Hospital email"
-                  autoComplete="username"
-                  autoFocus={!email}
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <div className="login-password">
-                  <input
-                    aria-label="Password"
-                    placeholder="Password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    autoFocus={!!email}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="login-eye"
-                    aria-label={
-                      showPassword ? "Hide characters" : "Show characters"
-                    }
-                    onClick={() => setShowPassword((v) => !v)}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              <div className="login-visual">
+                <Suspense fallback={null}>
+                  <LoginScene />
+                </Suspense>
+                <div className="login-visual-brand">
+                  <Activity size={20} />
+                  inception.
                 </div>
-                {error && (
-                  <p className="login-error" role="alert">
-                    {error}
+                <div className="login-visual-copy">
+                  <strong>One network. Better prepared.</strong>
+                  <span>
+                    The right supplies. The right hospital. Before they’re
+                    needed.
+                  </span>
+                </div>
+              </div>
+              <div className="login-panel">
+                <button
+                  type="button"
+                  className="login-close"
+                  aria-label="Close sign in"
+                  onClick={closeLogin}
+                >
+                  <X size={18} />
+                </button>
+                <div className="login-logo">
+                  <Activity size={22} />
+                </div>
+                <h2 id="login-title">Sign in to your hospital</h2>
+                <p className="login-sub">
+                  Enter your hospital credentials to open your workspace.
+                </p>
+                {logoutNotice && (
+                  <p role="status" className="login-notice">
+                    {logoutNotice}
                   </p>
                 )}
-                <button type="submit" className="login-submit" disabled={busy}>
-                  {busy ? "Signing in…" : "Log in"}
-                </button>
-              </form>
-              <p className="login-footnote">
-                Demo accounts: admin@kaveri.demo · admin@chamundi.demo ·
-                admin@mandya.demo — password <code>Demo@2026</code>
-              </p>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    login();
+                  }}
+                >
+                  <label className="login-field">
+                    <span>Email</span>
+                    <input
+                      aria-label="Email"
+                      type="email"
+                      placeholder="Hospital email"
+                      autoComplete="username"
+                      autoFocus={!email}
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </label>
+                  <label className="login-field">
+                    <span>Password</span>
+                    <span className="login-password">
+                      <input
+                        aria-label="Password"
+                        placeholder="Password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete="current-password"
+                        autoFocus={!!email}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="login-eye"
+                        aria-label={
+                          showPassword ? "Hide characters" : "Show characters"
+                        }
+                        onClick={() => setShowPassword((v) => !v)}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </span>
+                  </label>
+                  <label className="login-remember">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                    />
+                    <span>Remember me</span>
+                  </label>
+                  {error && (
+                    <p className="login-error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <button type="submit" className="login-submit" disabled={busy}>
+                    {busy ? "Signing in…" : "Log in"}
+                  </button>
+                </form>
+                <p className="login-footnote">
+                  Demo accounts: admin@kaveri.demo · admin@chamundi.demo ·
+                  admin@mandya.demo — password <code>Demo@2026</code>
+                </p>
+              </div>
             </div>
           </div>
         )}
