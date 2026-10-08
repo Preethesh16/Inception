@@ -86,3 +86,15 @@ def test_existing_stock_and_confirmed_arrivals_reduce_the_offer(state):
     # Arrival itself would expire unused; adding a transfer may not add waste.
     review = review_offer(state, n, 200)
     assert review["recommended_quantity"] < 120
+
+
+def test_search_records_reason_when_one_pack_breaks_donor_reserve(state, monkeypatch):
+    from inception import engine
+
+    monkeypatch.setattr(engine, "donor_safe", lambda state, fid, sid, removals: not removals)
+    result = engine.allocate(state)
+    assert any(
+        "protected demand and safety reserve" in r["reason"] and r.get("recipient_id")
+        for r in result["rejected"]
+    )
+    assert len(result["rejected"]) == len({str(r) for r in result["rejected"]})

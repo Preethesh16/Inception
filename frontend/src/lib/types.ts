@@ -230,7 +230,12 @@ export type Snapshot = {
         unused_expiring_units: number;
       }
     >;
-    rejected: { facility_id: string; supply_id: string; reason: string }[];
+    rejected: {
+      facility_id: string;
+      recipient_id?: string;
+      supply_id: string;
+      reason: string;
+    }[];
     deficits: {
       facility_id: string;
       supply_id: string;

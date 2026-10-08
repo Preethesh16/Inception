@@ -436,6 +436,18 @@ def allocate(state):
                 ),
             )
             found = False
+
+            def reject_batch(batch, reason):
+                entry = {
+                    "facility_id": batch["facility_id"],
+                    "recipient_id": fid,
+                    "supply_id": sid,
+                    "batch_id": batch["id"],
+                    "reason": reason,
+                }
+                if entry not in rejected:
+                    rejected.append(entry)
+
             for b in ordered:
                 if (
                     b["facility_id"] == fid
@@ -445,11 +457,17 @@ def allocate(state):
                 hours = travel_hours(state["facilities"][b["facility_id"]], state["facilities"][fid])
                 eta = dt(as_of) + timedelta(hours=hours)
                 if dt(b["expires_at"]) <= eta + timedelta(days=POLICY["residual_life_days"]):
+                    reject_batch(b, "Batch would arrive with insufficient remaining shelf life")
                     continue
                 if b["storage"] not in state["facilities"][fid]["storage"]:
+                    reject_batch(b, "Recipient cannot meet this batch's storage requirement")
                     continue
                 proposal = {**removed, b["id"]: removed.get(b["id"], 0) + supply["pack_size"]}
                 if not donor_safe(state, b["facility_id"], sid, proposal):
+                    reject_batch(
+                        b,
+                        f"Cannot release another {supply['pack_size']}-unit pack: the donor would fall below its protected demand and safety reserve",
+                    )
                     continue
                 inc = {
                     "id": f"planned-{b['id']}-{fid}-{len(incoming[fid])}",
@@ -470,6 +488,10 @@ def allocate(state):
                     or after["unmet"] >= before["unmet"] - 1e-6
                     or after["waste"] > before["waste"] + 1e-6
                 ):
+                    reject_batch(
+                        b,
+                        "This batch would not reduce the recipient's shortage without leaving stock unused or increasing expiry waste",
+                    )
                     continue
                 removed = proposal
                 incoming[fid].append(inc)

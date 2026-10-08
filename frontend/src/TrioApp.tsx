@@ -1578,7 +1578,9 @@ function Operations({
                                 network.allocation?.rejected.filter(
                                   (x) =>
                                     x.facility_id === h.id &&
-                                    x.supply_id === sid,
+                                    x.supply_id === sid &&
+                                    (!x.recipient_id ||
+                                      x.recipient_id === facility),
                                 ) || [];
                               const inZone = network.incidents.some(
                                 (i) =>
@@ -1640,8 +1642,11 @@ function Operations({
                           </Button>
                         ) : (
                           <p className="stage-result">
-                            No safe transfer is possible. The unmet requirement
-                            remains open; no approval has been created.
+                            No safe transfer is possible with the current stock
+                            and reserve rules. The unmet requirement remains
+                            open; consider expedited replenishment. Green map
+                            markers indicate adequate own stock, not
+                            transferable surplus.
                           </p>
                         )}
                       </>
