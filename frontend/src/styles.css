@@ -3794,3 +3794,19 @@ pre {
     font-size: 10px;
   }
 }
+
+/* Let the rotating WebGL scene sit directly on the page. */
+.hospital-network {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.hospital-network .network-canvas {
+  height: clamp(340px, 38vw, 510px);
+}
+@media (max-width: 420px) {
+  .hospital-network .network-canvas {
+    height: 300px;
+  }
+}

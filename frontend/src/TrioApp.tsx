@@ -141,7 +141,6 @@ export function TrioLanding() {
           <Activity />
           inception.
         </a>
-        <Badge tone="green">THREE-HOSPITAL DEMO</Badge>
       </header>
       <main>
         <section className="network-hero">

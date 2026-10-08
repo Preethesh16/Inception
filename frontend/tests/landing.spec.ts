@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-test("WebGL network selects a hospital and supports paused animation", async ({
+test("WebGL scene is frameless without animation controls", async ({
   page,
 }) => {
   await page.goto("/");
@@ -15,19 +15,21 @@ test("WebGL network selects a hospital and supports paused animation", async ({
     )
     .toBe(true);
   await page
-    .locator(".network-facilities button")
+    .locator(".trio-hospital-options button")
     .filter({ hasText: "Mandya" })
     .click();
-  await expect(
-    page.locator(".network-facilities button").filter({ hasText: "Mandya" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("MYSURU CARE NETWORK")).toHaveCount(0);
+  await expect(page.locator(".network-facilities")).toHaveCount(0);
+  await expect(page.locator(".hospital-network")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
   await expect(page.locator(".trio-hospital-options .selected")).toContainText(
     "Mandya",
   );
-  await page.getByRole("button", { name: "Pause network animation" }).click();
   await expect(
-    page.getByRole("button", { name: "Play network animation" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("button", { name: /(?:Pause|Play).*animation/ }),
+  ).toHaveCount(0);
   await page.screenshot({
     path: "../artifacts/landing-webgl-desktop.png",
     fullPage: true,
@@ -61,7 +63,7 @@ test("login selection remains available without WebGL", async ({ page }) => {
     page.getByText("Network schematic · 3D unavailable"),
   ).toBeVisible();
   await page
-    .locator(".network-facilities button")
+    .locator(".trio-hospital-options button")
     .filter({ hasText: "Chamundi" })
     .click();
   await expect(page.locator(".trio-hospital-options .selected")).toContainText(

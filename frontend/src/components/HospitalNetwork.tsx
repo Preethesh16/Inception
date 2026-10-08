@@ -8,7 +8,6 @@ import {
 } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Group, Mesh, QuadraticBezierCurve3, Vector3 } from "three";
-import { Pause, Play, Cross, ArrowUpRight } from "lucide-react";
 
 const hospitals = [
   {
@@ -187,10 +186,9 @@ function Scene({
   animate: boolean;
 }) {
   const group = useRef<Group>(null);
-  useFrame(({ pointer }, delta) => {
+  useFrame((_, delta) => {
     if (animate && group.current)
-      group.current.rotation.y +=
-        (pointer.x * 0.09 - group.current.rotation.y) * Math.min(delta * 3, 1);
+      group.current.rotation.y += Math.min(delta, 0.05) * 0.12;
   });
   return (
     <>
@@ -322,7 +320,6 @@ export default function HospitalNetwork({
   onSelect: (id: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
-  const [paused, setPaused] = useState(false);
   const [visible, setVisible] = useState(true);
   const [reduced, setReduced] = useState(
     () => matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -346,67 +343,24 @@ export default function HospitalNetwork({
   }, []);
   return (
     <div className="hospital-network" ref={container}>
-      <div className="network-topline">
-        <span>
-          <span className="network-status-dot" /> MYSURU CARE NETWORK
-        </span>
-        <span>03 facilities</span>
-      </div>
       <div className="network-canvas" aria-hidden="true">
         <SceneBoundary>
           <Canvas
             shadows
             camera={{ position: [8, 8, 10], fov: 37 }}
             dpr={[1, 1.5]}
-            frameloop={
-              paused || reduced || !visible || hidden ? "demand" : "always"
-            }
+            frameloop={reduced || !visible || hidden ? "demand" : "always"}
             gl={{ antialias: true, alpha: true }}
             fallback={<NetworkFallback />}
           >
             <Scene
               selected={selected}
               onSelect={onSelect}
-              animate={!paused && !reduced && visible && !hidden}
+              animate={!reduced && visible && !hidden}
             />
           </Canvas>
         </SceneBoundary>
       </div>
-      <div className="network-caption">
-        <span>
-          <Cross size={13} /> Connected care. Shared resilience.
-        </span>
-        <button
-          type="button"
-          aria-label={
-            paused ? "Play network animation" : "Pause network animation"
-          }
-          aria-pressed={paused}
-          onClick={() => setPaused(!paused)}
-        >
-          {paused ? <Play size={14} /> : <Pause size={14} />}
-        </button>
-      </div>
-      <div
-        className="network-facilities"
-        aria-label="Select a hospital from the network"
-      >
-        {hospitals.map((h) => (
-          <button
-            key={h.id}
-            type="button"
-            aria-pressed={selected === h.id}
-            onClick={() => onSelect(h.id)}
-          >
-            <span>{h.id}</span>
-            {h.name}
-            <ArrowUpRight size={13} />
-          </button>
-        ))}
-      </div>
-      <p className="network-disclaimer">
-        Illustrative network · select a hospital to sign in
-      </p>
     </div>
   );
 }
