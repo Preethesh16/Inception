@@ -1351,7 +1351,7 @@ function Operations({
     if (stage === 4 && approvalComplete) next = 5;
     if (!next) return;
     // Results already exist; these pauses pace their presentation, not computation.
-    const timer = setTimeout(() => setStage(next), stage === 3 ? 6000 : 2500);
+    const timer = setTimeout(() => setStage(next), 6000);
     return () => clearTimeout(timer);
   }, [
     walking,
@@ -1458,7 +1458,8 @@ function Operations({
           <div className="workflow-caption">
             <p>
               Edit inventory in the hospital dashboard, then refresh here to
-              follow the result.
+              follow the result. Each completed stage stays visible for six
+              seconds before the next available stage opens.
             </p>
             <label>
               <input
