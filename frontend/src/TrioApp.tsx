@@ -32,6 +32,14 @@ import { NetworkMap } from "./components/NetworkMap";
 const HospitalNetwork = lazy(() => import("./components/HospitalNetwork"));
 const CareMascot = lazy(() => import("./components/CareMascot"));
 const LoginScene = lazy(() => import("./components/LoginScene"));
+const HowItWorks = lazy(() => import("./components/HowItWorks"));
+const LandingInfo = lazy(() => import("./components/LandingInfo"));
+const LANDING_SECTIONS = [
+  ["home", "Home"],
+  ["how-it-works", "How it works"],
+  ["features", "Features"],
+  ["faq", "FAQ"],
+] as const;
 const REMEMBER_KEY = "inception-remember-email";
 function readRemembered() {
   try {
@@ -108,6 +116,32 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
   );
   useEffect(() => {
     sessionStorage.removeItem("inception-logout-notice");
+  }, []);
+  // Highlight the nav link for the section currently in view.
+  const [currentSection, setCurrentSection] = useState("home");
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const line = innerHeight * 0.4;
+      let current: string = LANDING_SECTIONS[0][0];
+      for (const [id] of LANDING_SECTIONS) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) current = id;
+      }
+      setCurrentSection(current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll);
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      removeEventListener("scroll", onScroll);
+      removeEventListener("resize", onScroll);
+    };
   }, []);
   // The sign-in dialog opens over the landing page; /login (used by approval
   // links and logout) opens it directly, prefilled for the linked hospital.
@@ -205,15 +239,29 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
           <CareMascot onOpenLogin={openLogin} />
         </Suspense>
       )}
-      <header>
+      <header className="landing-nav">
         <a className="brand" href="/">
           <Activity />
           inception.
         </a>
+        <nav className="landing-nav-links" aria-label="Primary">
+          {LANDING_SECTIONS.map(([id, label]) => (
+            <a
+              key={id}
+              href={"#" + id}
+              aria-current={currentSection === id ? "location" : undefined}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+        <button type="button" className="landing-nav-cta" onClick={openLogin}>
+          Sign in
+        </button>
       </header>
       <main>
         {
-          <section className="network-hero">
+          <section className="network-hero" id="home">
             <div className="network-hero-copy">
               <span className="eyebrow">
                 <span className="hero-eyebrow-line" /> MEDICAL SUPPLY
@@ -254,6 +302,10 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
             </Suspense>
           </section>
         }
+        <Suspense fallback={null}>
+          <HowItWorks />
+          <LandingInfo onTryDemo={openLogin} />
+        </Suspense>
         {open && (
           <div
             className="login-backdrop"
