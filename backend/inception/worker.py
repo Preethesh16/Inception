@@ -90,7 +90,8 @@ def run_job(store, job):
             unchanged = previous_run.get("revision") == revision and "searches" in current["allocations"].get(
                 previous_run.get("id"), {}
             )
-            for old in [] if unchanged else current["negotiations"].values():
+            baseline_only = state["settings"]["demo"].get("mode") == "three-hospital" and not state["settings"]["demo"].get("workflow_started", False)
+            for old in [] if unchanged and not baseline_only else current["negotiations"].values():
                 if old["status"] in ("Awaiting approvals", "Negotiating", "Proposed"):
                     old["status"] = "Needs re-evaluation"
             for i, move in enumerate([] if unchanged else result["moves"]):
@@ -102,7 +103,7 @@ def run_job(store, job):
                     "max_lines": copy.deepcopy(move["lines"]),
                     "run_id": run_id,
                     "revision": revision,
-                    "agent_mode": "deterministic constrained negotiation; OpenAI explanations on request",
+                    "agent_mode": "deterministic constrained negotiation; automatic agent briefing",
                     "version": 1,
                     "round": 1,
                     "status": "Awaiting approvals",

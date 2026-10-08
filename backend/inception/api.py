@@ -263,7 +263,7 @@ def report(body: Report, who=Depends(actor)):
             ).isoformat(),
         }
         s["reports"][id] = row
-        invalidate(s, "New suspected outbreak report")
+        invalidate(s, "New suspected outbreak report", start_workflow=True)
         emit(s, "REPORT_SUBMITTED", row, [fid], entity_id=id)
     job = enqueue(store)
     return {"report": row, "job": job}
@@ -297,7 +297,7 @@ def amend_report(id: str, body: Report, who=Depends(actor)):
                 ).isoformat(),
             }
         )
-        invalidate(s, "Report corrected")
+        invalidate(s, "Report corrected", start_workflow=True)
     return {"job": enqueue(store)}
 
 
@@ -407,7 +407,7 @@ def record_movement(body: InventoryMovement, who=Depends(actor)):
         )
         b["quantity"] += body.quantity
         movement(s, b, body.kind, body.quantity, body.reason, body.idempotency_key)
-        invalidate(s, "Inventory changed")
+        invalidate(s, "Inventory changed", start_workflow=True)
         emit(s, "INVENTORY_UPDATED", {"batch_id": b["id"], "quantity": body.quantity}, [b["facility_id"]])
     return {"job": enqueue(store)}
 
@@ -463,7 +463,7 @@ async def imports(file: UploadFile = File(...), who=Depends(actor)):
         for b in valid:
             s["batches"][b["id"]] = b
             movement(s, b, "receipt", b["quantity"], "Validated CSV import")
-        invalidate(s, "CSV inventory imported")
+        invalidate(s, "CSV inventory imported", start_workflow=True)
         emit(s, "INVENTORY_IMPORTED", {"rows": len(valid)}, list({b["facility_id"] for b in valid}))
     return {"rows": len(valid), "job": enqueue(store)}
 
@@ -870,7 +870,7 @@ def edit_batch(batch_id: str, body: BatchEdit, who=Depends(actor)):
         movement(s, b, "adjustment", delta, body.reason, body.command_id)
         b.update(quantity=body.quantity, expires_at=body.expires_at.isoformat())
         commands[body.command_id] = signature
-        invalidate(s, "Inventory quantity or expiry changed")
+        invalidate(s, "Inventory quantity or expiry changed", start_workflow=True)
         emit(
             s,
             "INVENTORY_UPDATED",

@@ -62,7 +62,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             type="monotone"
             dataKey="range"
             stroke="none"
-            fill="#dceae7"
+            fill="var(--forecast-band, #dceae7)"
             fillOpacity={0.65}
             name="Daily P10–P90"
           />
@@ -70,7 +70,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             isAnimationActive={false}
             type="monotone"
             dataKey="actual"
-            stroke="#40576a"
+            stroke="var(--forecast-history, #40576a)"
             strokeWidth={2}
             dot={false}
             name="Observed"
@@ -79,7 +79,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             isAnimationActive={false}
             type="monotone"
             dataKey="forecast"
-            stroke="#8b9fb3"
+            stroke="var(--forecast-model, #8b9fb3)"
             strokeWidth={2}
             dot={false}
             strokeDasharray="4 4"
@@ -89,7 +89,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             isAnimationActive={false}
             type="monotone"
             dataKey="planning"
-            stroke="#13816e"
+            stroke="var(--forecast-planning, #13816e)"
             strokeWidth={2.5}
             dot={false}
             name="Planning demand"

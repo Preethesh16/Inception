@@ -61,7 +61,7 @@ def advance(state, days, directory=DATA):
         demo["day"] += 1
         demo["as_of"] = (as_of + timedelta(days=1)).isoformat()
     demo["phase"] = "surge" if demo["day"] >= 240 else "emerging"
-    invalidate(state, "New observed consumption")
+    invalidate(state, "New observed consumption", start_workflow=True)
     emit(state, "SCENARIO_ADVANCED", {"as_of": demo["as_of"], "days": days})
 
 

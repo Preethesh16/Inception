@@ -72,6 +72,8 @@ export type Forecast = {
   input_hash: string;
 };
 export type Message = {
+  briefing_for?: string;
+  version?: number;
   evidence?: {
     offered_quantity: number;
     recommended_quantity: number;
@@ -94,6 +96,7 @@ export type Message = {
   at: string;
 };
 export type Negotiation = {
+  purpose?: string;
   created_at?: string;
   id: string;
   donor: string;

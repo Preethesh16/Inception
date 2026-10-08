@@ -249,6 +249,7 @@ def seed_trio(store, directory=DATA):
     seed(store, directory)
     with store.transaction() as s:
         s["settings"]["demo"]["mode"] = "three-hospital"
+        s["settings"]["demo"]["workflow_started"] = False
         s["facilities"] = {k: v for k, v in s["facilities"].items() if k in IDS}
         s["facilities"]["B"].update(lat=12.300, lng=76.679)
         for name in ("batches", "movements", "replenishments"):
@@ -343,5 +344,7 @@ def remove_import(state, fid, *, logout_reset=False):
     # Hide the old network allocation immediately; queued/in-flight runs are
     # invalidated by the revision change and rebuild from onboarded history only.
     state["settings"]["demo"]["latest_run"] = None
+    if fid == "A":
+        state["settings"]["demo"]["workflow_started"] = False
     invalidate(state, "Hospital import removed")
     emit(state, "HOSPITAL_IMPORT_REMOVED", {"facility_id": fid}, [fid])

@@ -16,7 +16,9 @@ def require(condition, message, status=409):
         raise DomainError(message, status)
 
 
-def invalidate(state, reason):
+def invalidate(state, reason, *, start_workflow=False):
+    if start_workflow:
+        state["settings"]["demo"]["workflow_started"] = True
     state["settings"]["demo"]["revision"] += 1
     for n in state["negotiations"].values():
         if n["status"] in ("Awaiting approvals", "Negotiating", "Proposed"):

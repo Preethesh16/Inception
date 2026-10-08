@@ -458,6 +458,7 @@ def brief_new_proposals(store, run_id):
                             "knowledge_refs": result["knowledge_refs"],
                             "policy_version": result["policy_version"],
                             "briefing_for": actor,
+                            "version": n["version"],
                             "quantity": n["quantity"],
                         }
                     )
@@ -509,6 +510,7 @@ def explain_counter_response(store, proposal_id, sender, version):
                 "policy_version": result["policy_version"],
                 "quantity": live["quantity"],
                 "briefing_for": actor,
+                "version": live["version"],
             }
         )
         emit(

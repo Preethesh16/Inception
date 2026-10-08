@@ -318,3 +318,33 @@ def test_done_restores_all_three_hospitals_to_original_csv_stock(store, monkeypa
     assert reconciliation(s)["balanced"]
     run_job(store, r.json()["job"])
     assert {f["facility_id"] for f in store.read()["forecasts"].values()} == {"A", "B", "D"}
+
+
+def test_onboarding_and_refresh_have_no_approvals_until_demo_action(store, monkeypatch):
+    seed_trio(store)
+    monkeypatch.setattr(api, "store", store)
+    client = TestClient(api.app)
+    headers = {"X-Demo-Session": "demo-A"}
+    raw = (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes()
+    response = client.post("/onboarding/csv", headers=headers, files={"file": ("A.csv", raw)})
+    assert response.status_code == 201
+    run_job(store, response.json()["job"])
+    run_job(store, enqueue(store))
+    state = store.read()
+    assert state["forecasts"]
+    assert not state["negotiations"]
+    assert all(d["kind"] == "none" for d in state["allocations"][state["settings"]["demo"]["latest_run"]]["searches"].values())
+    batch = state["batches"]["A-ORS-02"]
+    response = client.post("/inventory/batches/A-ORS-02", headers=headers, json={
+        "quantity": 0, "expires_at": batch["expires_at"],
+        "expected_quantity": batch["quantity"], "expected_expiry": batch["expires_at"],
+        "command_id": "start-demo", "reason": "Demonstrate demand gap",
+    })
+    assert response.status_code == 200
+    run_job(store, enqueue(store))
+    assert any(n["status"] == "Awaiting approvals" for n in store.read()["negotiations"].values())
+    client.post("/auth/logout", headers=headers)
+    response = client.post("/onboarding/csv", headers=headers, files={"file": ("A.csv", raw)})
+    assert response.status_code == 201
+    run_job(store, response.json()["job"])
+    assert not any(n["status"] == "Awaiting approvals" for n in store.read()["negotiations"].values())

@@ -352,6 +352,12 @@ def allocate(state):
 
     searches = search_decisions(state, risks)
     moves, rejected, deficits = [], [], []
+    demo = state["settings"]["demo"]
+    if demo.get("mode") == "three-hospital" and not demo.get("workflow_started", False):
+        for decision in searches.values():
+            decision.update(kind="none", reason="Baseline imported. Start a demo by reporting demand or updating inventory.")
+        return {"moves": [], "rejected": [], "deficits": [], "risks": risks, "searches": searches}
+
     for sid, supply in state["supplies"].items():
         recipients = [
             r for r in risks.values() if r["supply_id"] == sid and searches[r["id"]]["kind"] == "donor_search"

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -547,9 +548,10 @@ export default function TrioApp() {
       setBusy(false);
     }
   }
+  const [pipelineTarget, setPipelineTarget] = useState<HTMLDivElement | null>(null);
   const data = sessionExpired ? undefined : q.data;
   return (
-    <div className="app-shell trio-shell">
+    <div className={"app-shell trio-shell" + (consoleMode ? " backend-theme" : "")}>
       <aside className="sidebar">
         <a
           className="brand"
@@ -566,17 +568,17 @@ export default function TrioApp() {
         >
           <Activity /> <span>inception.</span>
         </a>
-        <div className="workspace-label">
-          {consoleMode ? "LIVE OPERATIONS" : "HOSPITAL WORKSPACE"}
-        </div>
-        <div className="trio-identity">
-          <strong>
-            {consoleMode ? "Regional control centre" : NAME[actor]}
-          </strong>
-          <small>
-            {consoleMode ? "Three connected hospitals" : EMAILS[actor]}
-          </small>
-        </div>
+        {consoleMode ? (
+          <div className="backend-sidebar-content">
+            <div className="workspace-label">Backend workflow</div>
+            <div ref={setPipelineTarget} />
+          </div>
+        ) : (
+          <>
+            <div className="workspace-label">HOSPITAL WORKSPACE</div>
+            <div className="trio-identity"><strong>{NAME[actor]}</strong><small>{EMAILS[actor]}</small></div>
+          </>
+        )}
         {!consoleMode && (
           <nav>
             {nav.map(([name, Icon]) => (
@@ -591,7 +593,7 @@ export default function TrioApp() {
             ))}
           </nav>
         )}
-        <div className="sidebar-bottom">
+        {!consoleMode && <div className="sidebar-bottom">
           <a
             href={
               consoleMode
@@ -604,7 +606,7 @@ export default function TrioApp() {
             {consoleMode ? "Hospital login" : "Operations console"} ↗
           </a>
           <small>Local synthetic demonstration</small>
-        </div>
+        </div>}
       </aside>
       <main className="trio-main">
         <header className="trio-header">
@@ -614,7 +616,7 @@ export default function TrioApp() {
             )}
             <h1>
               {consoleMode
-                ? "Every decision, visible."
+                ? "Backend workflow"
                 : tab === "Onboarding"
                   ? "Your hospital. Your supplies."
                   : tab}
@@ -647,7 +649,7 @@ export default function TrioApp() {
         ) : (
           <>
             {consoleMode ? (
-              <Operations data={data} act={act} busy={busy} />
+              <Operations data={data} act={act} busy={busy} pipelineTarget={pipelineTarget} />
             ) : (
               <>
                 {tab === "Onboarding" && (
@@ -1139,7 +1141,7 @@ function Approvals({
   return (
     <Card
       title="Transfer approvals"
-      sub="The allocation engine enforces safe quantities. Agents explain or counterpropose within those limits; both hospitals must approve the same version."
+      sub="Review the transfer terms and recommendation. Both hospitals must approve the same agreement before supplies move."
     >
       {offers.length ? (
         offers.map((n) => (
@@ -1187,25 +1189,45 @@ function Proposal({
   busy: boolean;
 }) {
   const [quantity, setQuantity] = useState(n.quantity);
-  const [explanation, setExplanation] = useState("");
+  const supply = data.supplies.find((s) => s.id === n.supply_id);
+  const briefing = [...n.messages].reverse().find((m) =>
+    m.briefing_for === actor && m.version === n.version && m.quantity === n.quantity);
+  useEffect(() => setQuantity(n.quantity), [n.quantity, n.version]);
   return (
-    <article className="trio-proposal" data-proposal-id={n.id}>
+    <article className="trio-proposal transfer-contract" data-proposal-id={n.id}>
+      <div className="contract-reference">TRANSFER AGREEMENT · {n.id} · VERSION {n.version}</div>
       <div className="entry-top">
-        <h3>
-          {NAME[n.donor]} → {NAME[n.recipient]}
-        </h3>
+        <h3>{supply?.name || n.supply_id}</h3>
         <Badge tone={n.status === "Reserved" ? "green" : "amber"}>
           {n.status}
         </Badge>
       </div>
-      <p>
-        <strong>
-          {n.quantity} {data.supplies.find((s) => s.id === n.supply_id)?.unit}s
-          · {n.supply_id}
-        </strong>{" "}
-        · limit {n.max_quantity} · version {n.version}
-      </p>
-      <p>{n.reason}</p>
+      <div className="contract-parties">
+        <div><small>Supplying hospital</small><strong>{NAME[n.donor]}</strong></div>
+        <span aria-hidden="true">→</span>
+        <div><small>Receiving hospital</small><strong>{NAME[n.recipient]}</strong></div>
+      </div>
+      <dl className="contract-terms">
+        <div><dt>Agreed quantity</dt><dd>{fmt(n.quantity)} {supply?.unit}</dd></div>
+        <div><dt>Maximum safe offer</dt><dd>{fmt(n.max_quantity)} {supply?.unit}</dd></div>
+        <div><dt>Estimated arrival · demo time</dt><dd>{new Date(n.eta).toLocaleString()}</dd></div>
+      </dl>
+      <div className="contract-batches">
+        {n.lines.map((line, i) => <div key={line.batch_id || i}>
+          <strong>{line.lot || line.batch_id || "Allocated batch"}</strong>
+          <span>{fmt(line.quantity)} {supply?.unit}</span>
+          <span>Expiry: {line.expires_at ? new Date(line.expires_at).toLocaleDateString() : "Not supplied"}</span>
+        </div>)}
+      </div>
+      <section className="contract-explanation" aria-label="Decision explanation">
+        <small>WHY THIS TRANSFER IS RECOMMENDED</small>
+        <h4>{n.purpose === "expiry_rescue" ? "Use supplies before they expire." : "Help cover the receiving hospital’s forecast demand."}</h4>
+        <p>{n.purpose === "expiry_rescue"
+          ? `The forecast indicates ${NAME[n.recipient]} can use these ${fmt(n.quantity)} ${supply?.unit} before expiry. The supplying hospital keeps its protected demand and reserve.`
+          : `The forecast identified a supply gap at ${NAME[n.recipient]}. This offer provides ${fmt(n.quantity)} ${supply?.unit} while protecting the supplying hospital’s forecast demand and reserve. ${n.remaining_unmet > 0 ? `${fmt(n.remaining_unmet)} units of forecast demand still need another source.` : "The evaluated forecast gap is covered by the planned allocations."}`}</p>
+        <p className="microcopy">These are planning estimates. Stock moves only after both hospitals approve this version.</p>
+        {briefing && <div className="contract-agent"><strong>Your hospital agent’s recommendation</strong><p>{briefing.text}</p><small>{briefing.mode}</small></div>}
+      </section>
       <div className="trio-math">
         <span>
           <small>Recipient coverage before</small>
@@ -1239,12 +1261,13 @@ function Proposal({
           </div>
         ))}
       </details>
-      <p className="microcopy">
-        Approvals:{" "}
-        {n.approvals.map((a) => NAME[a]).join(", ") ||
-          "Neither hospital has approved"}{" "}
-        · {n.id}
-      </p>
+      <div className="contract-signatures">
+        {[n.donor, n.recipient].map((id) => <div key={id}>
+          <small>{id === n.donor ? "Supplier approval" : "Recipient approval"}</small>
+          <strong>{NAME[id]}</strong>
+          <span>{n.approvals.includes(id) ? `Approved · version ${n.version}` : "Awaiting administrator approval"}</span>
+        </div>)}
+      </div>
       {actor !== "judge" && n.status === "Awaiting approvals" && (
         <>
           <div className="trio-actions">
@@ -1288,29 +1311,6 @@ function Proposal({
               Evaluate counteroffer
             </Button>
           </div>
-          <Button
-            variant="ghost"
-            onClick={async () => {
-              try {
-                const r = await post<{ answer: string; mode: string }>(
-                  "/assistant/query",
-                  actor,
-                  {
-                    question:
-                      "Explain proposal " +
-                      n.id +
-                      " and my protected reserve or recipient benefit.",
-                  },
-                );
-                setExplanation(r.mode + ": " + r.answer);
-              } catch (e) {
-                setExplanation(String(e));
-              }
-            }}
-          >
-            Ask agent to explain this decision
-          </Button>
-          {explanation && <p>{explanation}</p>}
         </>
       )}
     </article>
@@ -1392,10 +1392,12 @@ function Deliveries({
   );
 }
 function Operations({
+  pipelineTarget,
   data: network,
   act,
   busy,
 }: {
+  pipelineTarget: HTMLDivElement | null;
   data: Snapshot;
   act: (p: string, b?: unknown) => Promise<boolean>;
   busy: boolean;
@@ -1578,6 +1580,18 @@ function Operations({
   }
   return (
     <div className="guided-workflow">
+      {pipelineTarget && createPortal(
+        <nav className="backend-pipeline" aria-label="Backend workflow pipeline">
+          {titles.map((title, index) => (
+            <button key={index} disabled={!products.length || !ready[index]}
+              aria-current={stage === index + 1 ? "step" : undefined}
+              className={(complete[index] ? "is-complete " : "") + (stage === index + 1 ? "is-active" : "")}
+              onClick={() => select(index + 1, true)}>
+              <span className="pipeline-node">{complete[index] ? <CheckCircle2 size={16} /> : String(index + 1).padStart(2, "0")}</span>
+              <span><strong>{title}</strong><small>{!products.length ? "Awaiting CSV" : index === 0 && (active || requested) ? "Calculating" : complete[index] ? "Complete" : !ready[index] ? "Waiting" : index === 3 ? "Awaiting approval" : "Ready"}</small></span>
+            </button>
+          ))}
+        </nav>, pipelineTarget)}
       <div className="workflow-controls">
         <label>
           Hospital
@@ -1722,7 +1736,7 @@ function Operations({
                           {active || requested
                             ? "Running the forecast and checking current batches, expiry and arrivals…"
                             : gate?.kind === "none"
-                              ? "No transfer needed. This workflow stops here."
+                              ? gate.reason || "No transfer needed. This workflow stops here."
                               : gate?.reason ||
                                 "Upload the hospital CSV to begin."}
                         </p>
