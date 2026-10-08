@@ -19,7 +19,6 @@ import {
   ArrowRight,
   Upload,
   AlertTriangle,
-  Network,
   Download,
   X,
   Eye,
@@ -31,6 +30,7 @@ import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
 const HospitalNetwork = lazy(() => import("./components/HospitalNetwork"));
+const CareMascot = lazy(() => import("./components/CareMascot"));
 const LoginScene = lazy(() => import("./components/LoginScene"));
 const REMEMBER_KEY = "inception-remember-email";
 function readRemembered() {
@@ -138,6 +138,34 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
       removeEventListener("keydown", onKey);
     };
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const controls = [
+        ...document.querySelectorAll<HTMLElement>(
+          ".login-backdrop a[href], .login-backdrop button:not(:disabled), .login-backdrop input:not(:disabled)",
+        ),
+      ].filter((el) => el.getClientRects().length > 0);
+      const first = controls[0],
+        last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", trapFocus);
+      document.querySelector<HTMLElement>(".hero-login-link")?.focus();
+    };
+  }, [open]);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -172,6 +200,11 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
   }
   return (
     <div className="demo-landing trio-landing">
+      {!open && (
+        <Suspense fallback={null}>
+          <CareMascot onOpenLogin={openLogin} />
+        </Suspense>
+      )}
       <header>
         <a className="brand" href="/">
           <Activity />
@@ -224,14 +257,12 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
         {open && (
           <div
             className="login-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-title"
             onMouseDown={(e) => e.target === e.currentTarget && closeLogin()}
           >
-            <div
-              className="login-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="login-title"
-            >
+            <div className="login-modal">
               <div className="login-visual">
                 <Suspense fallback={null}>
                   <LoginScene />
@@ -309,7 +340,11 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
                         }
                         onClick={() => setShowPassword((v) => !v)}
                       >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showPassword ? (
+                          <EyeOff size={16} />
+                        ) : (
+                          <Eye size={16} />
+                        )}
                       </button>
                     </span>
                   </label>
@@ -326,7 +361,11 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
                       {error}
                     </p>
                   )}
-                  <button type="submit" className="login-submit" disabled={busy}>
+                  <button
+                    type="submit"
+                    className="login-submit"
+                    disabled={busy}
+                  >
                     {busy ? "Signing in…" : "Log in"}
                   </button>
                 </form>
@@ -336,26 +375,11 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
                 </p>
               </div>
             </div>
+            <Suspense fallback={null}>
+              <CareMascot onOpenLogin={openLogin} context="login" />
+            </Suspense>
           </div>
         )}
-        {
-          <a className="control-entry" href="http://localhost:5174">
-            <Network />
-            <div>
-              <strong>Live operations console</strong>
-              <p>
-                Forecast → stock risk → outbreak-aware donor search →
-                negotiations → human approval.
-              </p>
-            </div>
-            <ArrowRight />
-          </a>
-        }
-        <p className="microcopy">
-          Synthetic hospital data. Local demo login is not production
-          authentication. Chamundi and Mandya are already onboarded using their
-          own CSV files.
-        </p>
       </main>
     </div>
   );

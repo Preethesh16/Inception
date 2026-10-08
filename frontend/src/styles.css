@@ -3905,15 +3905,33 @@ pre {
 .login-panel form > * {
   animation: login-item 0.4s ease-out both;
 }
-.login-panel > :nth-child(2) { animation-delay: 0.05s; }
-.login-panel > :nth-child(3) { animation-delay: 0.1s; }
-.login-panel > :nth-child(4) { animation-delay: 0.14s; }
-.login-panel form > :nth-child(1) { animation-delay: 0.18s; }
-.login-panel form > :nth-child(2) { animation-delay: 0.22s; }
-.login-panel form > :nth-child(3) { animation-delay: 0.26s; }
-.login-panel form > :nth-child(4) { animation-delay: 0.3s; }
-.login-panel form > :nth-child(5) { animation-delay: 0.34s; }
-.login-panel > .login-footnote { animation-delay: 0.38s; }
+.login-panel > :nth-child(2) {
+  animation-delay: 0.05s;
+}
+.login-panel > :nth-child(3) {
+  animation-delay: 0.1s;
+}
+.login-panel > :nth-child(4) {
+  animation-delay: 0.14s;
+}
+.login-panel form > :nth-child(1) {
+  animation-delay: 0.18s;
+}
+.login-panel form > :nth-child(2) {
+  animation-delay: 0.22s;
+}
+.login-panel form > :nth-child(3) {
+  animation-delay: 0.26s;
+}
+.login-panel form > :nth-child(4) {
+  animation-delay: 0.3s;
+}
+.login-panel form > :nth-child(5) {
+  animation-delay: 0.34s;
+}
+.login-panel > .login-footnote {
+  animation-delay: 0.38s;
+}
 .login-sub {
   margin: -18px 0 24px;
   color: #708279;
@@ -4127,4 +4145,153 @@ pre {
   .login-panel {
     padding: 36px 22px 22px;
   }
+}
+
+/* Pip flies once, then docks without intercepting the page underneath. */
+.care-mascot {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: 170px;
+  height: 190px;
+  z-index: 80;
+  pointer-events: none;
+}
+.care-mascot.is-flying {
+  animation: pip-arrival 5.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.mascot-model {
+  width: 100%;
+  height: 100%;
+}
+.mascot-model canvas {
+  display: block;
+}
+.mascot-intro {
+  position: absolute;
+  bottom: 178px;
+  right: 8px;
+  width: min(290px, calc(100vw - 40px));
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #e6d8ed;
+  border-radius: 20px 20px 6px 20px;
+  box-shadow: 0 12px 40px #66447620;
+  pointer-events: auto;
+}
+.mascot-eyebrow {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #997046;
+}
+.mascot-intro h2 {
+  font-size: 24px;
+  color: #6b4384;
+  margin: 10px 0;
+  letter-spacing: -0.7px;
+}
+.mascot-intro p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #78677e;
+}
+.mascot-intro a {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid #eee1ed;
+  font-size: 12px;
+  font-weight: 600;
+  color: #80549c;
+}
+.mascot-close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: #8a7793;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+.mascot-close:hover {
+  background: #f9eff5;
+}
+.mascot-hit-target {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 40%;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.mascot-hit-target:focus-visible {
+  outline: 2px solid #9278ce;
+  outline-offset: -8px;
+}
+@keyframes pip-arrival {
+  0% {
+    transform: translate(calc(-100vw - 180px), calc(-55vh)) rotate(-15deg)
+      scale(0.65);
+  }
+  25% {
+    transform: translate(calc(-65vw), calc(-48vh)) rotate(10deg) scale(0.9);
+  }
+  52% {
+    transform: translate(calc(-32vw), calc(-68vh)) rotate(-12deg);
+  }
+  76% {
+    transform: translate(calc(-10vw), calc(-32vh)) rotate(9deg);
+  }
+  92% {
+    transform: translate(0px, calc(0px - 18px)) rotate(-4deg);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(0);
+  }
+}
+@media (max-width: 600px) {
+  .care-mascot {
+    width: 125px;
+    height: 145px;
+    right: 10px;
+    bottom: 8px;
+  }
+  .mascot-intro {
+    bottom: 134px;
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .care-mascot.is-flying {
+    animation: none;
+  }
+}
+
+/* Keep the guide inside the viewport while the page scrolls. */
+.mascot-intro {
+  max-height: calc(100dvh - 210px);
+  overflow-y: auto;
+}
+@media (max-width: 600px) {
+  .mascot-intro {
+    max-height: calc(100dvh - 165px);
+  }
+}
+
+/* Pip remains in front of the login backdrop and inside its keyboard scope. */
+.login-backdrop > .care-mascot {
+  z-index: 2;
+}
+.login-backdrop .login-modal {
+  position: relative;
+  z-index: 1;
 }

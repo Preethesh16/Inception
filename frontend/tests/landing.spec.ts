@@ -68,19 +68,68 @@ test("login selection remains available without WebGL", async ({ page }) => {
     page.getByText("Network schematic · 3D unavailable"),
   ).toBeVisible();
   await page.getByRole("link", { name: "Enter your hospital" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to your hospital" }),
+  ).toBeVisible();
 });
 
-test("Enter your hospital opens the sign-in dialog", async ({ page }) => {
+test("Enter your hospital navigates to the login popup with Pip", async ({
+  page,
+}) => {
   await page.goto("/");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("link", { name: "Enter your hospital" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign in to your hospital" });
-  await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(dialog.getByLabel("Email")).toBeVisible();
-  await expect(dialog.getByLabel("Password")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator(".network-hero")).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Sign in to your hospital" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Email")).toBeVisible();
+  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.locator(".care-mascot")).toHaveClass(/is-landed/);
+  await expect(page.locator(".mascot-intro")).toContainText(
+    "Enter your hospital’s email and password",
+  );
+  await page.screenshot({
+    path: "../artifacts/pip-login.png",
+    fullPage: false,
+  });
   await page.getByRole("button", { name: "Close sign in" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("dedicated login preserves hospital identity and approval destination", async ({
+  page,
+}) => {
+  await page.goto("/login?login=D&tab=approvals");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(
+    "admin@mandya.demo",
+  );
+  await page.getByLabel("Password", { exact: true }).fill("Demo@2026");
+  await page.getByRole("button", { name: "Show characters" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute(
+    "type",
+    "text",
+  );
+  await expect(page.locator(".mascot-model canvas")).toBeVisible();
+  await page.getByRole("button", { name: "Hide characters" }).click();
+  await page.screenshot({
+    path: "../artifacts/pip-login.png",
+    fullPage: false,
+  });
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(page).toHaveURL(/\/hospital\/D\?tab=approvals$/);
+});
+
+test("login keeps Pip fixed in the bottom right", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.locator(".login-character-panel")).toHaveCount(0);
+  await expect(page.locator(".care-mascot")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".mascot-intro")).toContainText(
+    "Enter your hospital’s email",
+  );
+  await page.getByRole("button", { name: "Close introduction" }).click();
+  await expect(page.locator(".mascot-model canvas")).toBeVisible();
+  await page.getByRole("button", { name: "Open Pip introduction" }).click();
+  await expect(page.locator(".mascot-intro")).toBeVisible();
 });
