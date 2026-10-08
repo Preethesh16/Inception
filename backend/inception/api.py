@@ -742,6 +742,21 @@ def login(body: DemoLogin):
     return {"session": token, "facility_id": fid, "mode": "local demo login"}
 
 
+@app.post("/auth/logout")
+def logout(who=Depends(actor), x_demo_session: str | None = Header(default=None)):
+    from .trio import remove_import
+
+    with store.transaction() as s:
+        reset = who == "A" and s["settings"]["demo"].get("mode") == "three-hospital"
+        if reset:
+            remove_import(s, "A", logout_reset=True)
+        sessions = s["settings"].setdefault("sessions", {})
+        for token, record in list(sessions.items()):
+            if token == x_demo_session or (reset and record["facility_id"] == "A"):
+                del sessions[token]
+    return {"status": "logged_out", "reset": reset}
+
+
 @app.get("/onboarding/template/{fid}")
 def template(fid: str, who=Depends(actor)):
     from fastapi.responses import FileResponse

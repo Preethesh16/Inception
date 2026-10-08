@@ -24,6 +24,8 @@ The launcher starts FastAPI, the separate CPU worker, and the two Vite frontends
 
 The application generates its data and queues its first analysis automatically. `Ctrl+C` shuts down the child processes. Restarting retains the ledger. Use **Reset onboarding demo** in the console for a reproducible fresh start.
 
+Logging out of Hospital A clears its CSV import, inventory, usage history, forecasts, outbreak reports, and active workflow. Its open console becomes empty until the next CSV upload. Hospital B and D logouts preserve their data. A's prior transfer records are archived locally; pending reservations are released, and partner stock stays at its current quantity. This is a demo reset, including for unfinished simulated deliveries, not a production shipment-cancellation workflow.
+
 For exact Python dependency reproduction after creating the virtual environment:
 
 ```sh

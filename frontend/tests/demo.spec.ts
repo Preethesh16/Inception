@@ -394,8 +394,9 @@ test("hospital has four tabs, an empty approval inbox, and scoped approval login
   });
 });
 
-test("removing an imported hospital empties its open console without affecting partners", async ({
+test("Hospital A logout empties its open console without affecting partners", async ({
   page,
+  context,
   request,
 }) => {
   await request.post("/api/demo/onboarding-reset", { headers });
@@ -415,9 +416,10 @@ test("removing an imported hospital empties its open console without affecting p
   await page.goto("http://localhost:5174/?hospital=A");
   await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
   await expect(page.locator(".forecast-summary")).toHaveCount(1);
-  expect((await request.delete("/api/onboarding/A", { headers })).ok()).toBe(
-    true,
-  );
+  const hospital = await context.newPage();
+  await login(hospital, "A");
+  await hospital.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(hospital).toHaveURL("http://localhost:5173/");
   await expect(
     page.getByText("No hospital data imported", { exact: true }),
   ).toBeVisible();

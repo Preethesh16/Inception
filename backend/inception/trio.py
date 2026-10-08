@@ -277,16 +277,61 @@ def seed_trio(store, directory=DATA):
         emit(s, "THREE_HOSPITAL_DEMO_READY", {"onboarding": "A", "nearby": "B", "outside": "D"})
 
 
-def remove_import(state, fid):
+def remove_import(state, fid, *, logout_reset=False):
     """Clear one demo import without reseeding other hospitals or their stock."""
     from .transactions import invalidate
 
     require(fid in state["facilities"], "Unknown hospital", 404)
     require(state["settings"]["demo"].get("mode") == "three-hospital", "Requires the onboarding demo")
     require(
-        not any(fid in (t["donor"], t["recipient"]) for t in state["transfers"].values()),
+        logout_reset or not any(fid in (t["donor"], t["recipient"]) for t in state["transfers"].values()),
         "This hospital has transfer records. Use the full demo reset to avoid erasing transferred stock history.",
     )
+    if logout_reset:
+        import copy
+        from .store import now
+        from .transactions import movement
+
+        related = {k: t for k, t in state["transfers"].items() if fid in (t["donor"], t["recipient"])}
+        # This is an explicit local-demo boundary reset. Keep the original
+        # ledger and terms in an archive before removing A from the network.
+        state["settings"].setdefault("logout_archives", []).append(
+            {
+                "facility_id": fid,
+                "at": now(),
+                "batches": copy.deepcopy(
+                    {k: b for k, b in state["batches"].items() if b["facility_id"] == fid}
+                ),
+                "transfers": copy.deepcopy(related),
+                "negotiations": copy.deepcopy(
+                    {k: n for k, n in state["negotiations"].items() if fid in (n["donor"], n["recipient"])}
+                ),
+                "movements": copy.deepcopy(state["movements"]),
+            }
+        )
+        for tid, transfer in related.items():
+            if transfer["status"] in ("Reserved", "Assigned"):
+                for line in transfer["lines"]:
+                    batch = state["batches"][line["batch_id"]]
+                    batch["reserved"] -= line["quantity"]
+                    movement(
+                        state, batch, "release", 0, "Reservation released by Hospital A demo logout reset"
+                    )
+            # Partner stock remains unchanged. A removed shipment becomes a
+            # documented boundary adjustment/receipt in the remaining ledger,
+            # rather than an internal transfer to a now nonexistent import.
+            for mid, m in list(state["movements"].items()):
+                if m["facility_id"] == fid:
+                    continue
+                if mid.startswith(f"dispatch-{tid}-"):
+                    m["kind"] = "adjustment"
+                    m["reason"] += "; counterpart archived by Hospital A demo logout reset"
+                elif mid.startswith(f"receive-{tid}-"):
+                    del state["movements"][mid]
+                    m["id"] = "logout-boundary-" + mid
+                    m["reason"] += "; retained receipt from archived Hospital A demo"
+                    state["movements"][m["id"]] = m
+            del state["transfers"][tid]
     for collection in ("batches", "movements", "replenishments", "reports", "forecasts"):
         state[collection] = {k: v for k, v in state[collection].items() if v["facility_id"] != fid}
     state["negotiations"] = {

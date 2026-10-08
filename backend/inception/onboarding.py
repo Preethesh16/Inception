@@ -56,7 +56,10 @@ def onboard(state, who, inventory_raw, history_raw):
     require(
         state["settings"]["demo"]["day"] == 237, "Start a fresh onboarding demo before importing opening data"
     )
-    require(not state["transfers"], "Start a fresh onboarding demo before replacing inventory")
+    require(
+        not any(who in (t["donor"], t["recipient"]) for t in state["transfers"].values()),
+        "Reset this hospital's demo before replacing inventory",
+    )
     batches, observations, errors, seen = [], [], [], set()
     for i, row in enumerate(rows(inventory_raw), 2):
         try:

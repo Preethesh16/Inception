@@ -138,11 +138,14 @@ def test_expiry_edit_is_audited_and_idempotent(store, monkeypatch):
 
 def test_remove_hospital_import_clears_forecasts_and_preserves_partners(store, monkeypatch):
     import copy
+
     seed_trio(store)
     monkeypatch.setattr(api, "store", store)
     client = TestClient(api.app)
     raw = (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes()
-    result = client.post("/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")})
+    result = client.post(
+        "/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")}
+    )
     assert result.status_code == 201, result.text
     run_job(store, enqueue(store))
     before = store.read()
@@ -165,7 +168,96 @@ def test_remove_hospital_import_clears_forecasts_and_preserves_partners(store, m
     assert reconciliation(after)["balanced"]
     assert client.delete("/onboarding/B", headers={"X-Demo-Session": "demo-A"}).status_code == 403
     # The same CSV can now be uploaded again as a fresh onboarding.
-    result = client.post("/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")})
+    result = client.post(
+        "/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")}
+    )
     assert result.status_code == 201, result.text
     run_job(store, result.json()["job"])
     assert len(client.get("/forecasts", headers={"X-Demo-Session": "demo-A"}).json()) == 3
+
+
+def test_logout_resets_a_revokes_sessions_and_keeps_partner_logouts_non_destructive(store, monkeypatch):
+    seed_trio(store)
+    monkeypatch.setattr(api, "store", store)
+    client = TestClient(api.app)
+
+    def login_as(email):
+        return {
+            "X-Demo-Session": client.post(
+                "/auth/login", json={"email": email, "password": "Demo@2026"}
+            ).json()["session"]
+        }
+
+    a = login_as("admin@kaveri.demo")
+    another_a = login_as("admin@kaveri.demo")
+    raw = (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes()
+    client.post("/onboarding/csv", headers=a, files={"file": ("A.csv", raw)})
+    run_job(store, enqueue(store))
+    stale = enqueue(store)
+    partners = {k: v for k, v in store.read()["batches"].items() if v["facility_id"] != "A"}
+    assert client.post("/auth/logout").status_code == 401
+    b = login_as("admin@chamundi.demo")
+    before = store.read()["batches"]
+    assert client.post("/auth/logout", headers=b).json()["reset"] is False
+    assert store.read()["batches"] == before
+    assert client.get("/snapshot", headers=b).status_code == 401
+    assert client.post("/auth/logout", headers=a).json()["reset"] is True
+    assert client.get("/snapshot", headers=another_a).status_code == 401
+    run_job(store, stale)
+    snapshot = client.get("/snapshot", headers={"X-Demo-Session": "demo-A"}).json()
+    for key in ("inventory", "supplies", "forecasts", "risks", "negotiations", "transfers", "movements"):
+        assert snapshot[key] == [], key
+    assert store.read()["batches"] == partners
+    assert reconciliation(store.read())["balanced"]
+    a = login_as("admin@kaveri.demo")
+    assert client.post("/onboarding/csv", headers=a, files={"file": ("A.csv", raw)}).status_code == 201
+
+
+import pytest
+
+
+@pytest.mark.parametrize("donor,recipient", [("B", "A"), ("A", "B")])
+@pytest.mark.parametrize("status", ["Reserved", "Assigned", "Picked up", "In transit", "Received"])
+def test_logout_reset_after_transfer_preserves_partner_stock_and_reconciles(store, donor, recipient, status):
+    import copy
+    from inception.trio import import_bundle, remove_import
+    from inception.transactions import movement
+
+    seed_trio(store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+        batch = s["batches"][donor + "-ORS-01"]
+        t = {
+            "id": "logout-test",
+            "donor": donor,
+            "recipient": recipient,
+            "status": status,
+            "quantity": 10,
+            "lines": [{"batch_id": batch["id"], "quantity": 10}],
+        }
+        s["transfers"][t["id"]] = t
+        if status in ("Reserved", "Assigned"):
+            batch["reserved"] += 10
+        else:
+            batch["quantity"] -= 10
+            movement(s, batch, "dispatch", -10, "Test transfer", "dispatch-logout-test-" + batch["id"])
+        if status == "Received":
+            received = {
+                **copy.deepcopy(batch),
+                "id": "received-logout-test",
+                "facility_id": recipient,
+                "quantity": 10,
+                "reserved": 0,
+            }
+            s["batches"][received["id"]] = received
+            movement(s, received, "receipt", 10, "Test receipt", "receive-logout-test-" + received["id"])
+        assert reconciliation(s)["balanced"]
+        partners = {k: v["quantity"] for k, v in s["batches"].items() if v["facility_id"] != "A"}
+        remove_import(s, "A", logout_reset=True)
+        assert {k: v["quantity"] for k, v in s["batches"].items()} == partners
+        assert all(b["reserved"] == 0 for b in s["batches"].values())
+        assert not s["transfers"]
+        assert s["settings"]["logout_archives"][-1]["transfers"]
+        assert reconciliation(s)["balanced"], reconciliation(s)
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+        assert reconciliation(s)["balanced"]

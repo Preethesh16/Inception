@@ -309,9 +309,23 @@ export default function TrioApp() {
           {!consoleMode && (
             <Button
               variant="ghost"
-              onClick={() => {
-                sessionStorage.removeItem("inception-session-" + actor);
-                location.href = "/";
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError("");
+                try {
+                  await post("/auth/logout", actor, {});
+                  sessionStorage.removeItem("inception-session-" + actor);
+                  if (actor === "A") {
+                    Object.keys(sessionStorage)
+                      .filter((key) => key.startsWith("forecast-checkpoint-A:"))
+                      .forEach((key) => sessionStorage.removeItem(key));
+                  }
+                  location.replace("/");
+                } catch (e) {
+                  setError(String(e));
+                  setBusy(false);
+                }
               }}
             >
               <LogOut size={15} />
