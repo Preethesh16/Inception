@@ -16,7 +16,7 @@ These are synthetic facilities and local demonstration accounts, not production 
 
 ## 1. Upload Kaveri's one-file dataset
 
-Log into Kaveri. In **Inventory**, download its hospital CSV or use:
+Log into Kaveri. In **Onboarding**, download its hospital CSV or use:
 
 `demo-data/three-hospital/A-hospital.csv`
 
@@ -28,11 +28,11 @@ Partner CSVs are in the same folder (`B-hospital.csv`, `D-hospital.csv`). They a
 
 ## 2. Demonstrate a stock shortage
 
-Keep the operations console open. In Kaveri → **Manage inventory**:
+Keep the operations console open. In Kaveri → **Inventory management**:
 
 1. Edit `A-ORS-01`, set on-hand quantity to **10**, save.
 2. Edit `A-ORS-02`, set on-hand quantity to **10**, save.
-3. Wait for analysis to complete.
+3. In the console, select **Kaveri → Oral rehydration salts** from the dropdowns, then press **Refresh workflow**. It forces a new demand inference and checks the updated stock.
 
 The raw consumption forecast need not change: stock edits are not evidence of changed demand. The inventory simulator recalculates FEFO coverage, stock-out timing and unmet demand. The allocator searches nearest eligible donors, protecting their forecast demand and reserve.
 
@@ -52,28 +52,29 @@ The system reruns planning and replaces stale recommendations. Mandya becomes th
 2. Approve feasible terms as Kaveri.
 3. Log into Mandya → **Approvals**, inspect its own explanation and approve the same proposal version.
 4. The reservation occurs only after both approvals. Any material counteroffer clears previous approvals.
-5. Console → final stage: **Claim courier job → Confirm pickup → Start transit → Confirm receipt**.
+5. The console advances to **Delivery & stock update**. Click **Simulate delivery** to record rider acceptance, pickup, transit and receipt. Manual courier controls remain available in an expandable section.
 6. Inspect **Ledger balanced** and the received transfer.
 
 Automatic hospital briefings are generated when new offers appear. With `OPENAI_API_KEY`, they use the Responses API and scoped tools, with at most one counteroffer per proposal per agent pass and the existing three-round limit. Without it, the conversation clearly labels deterministic explanations. User-requested counteroffers are server-validated. Neither model nor console can bypass administrator approval.
 
 ## 5. Demonstrate expiry risk
 
-In Mandya → **Manage inventory**, edit the expiry of `D-ORS-01` to **6 October 2026** while the scenario is at 5 October. Analysis will recalculate expiry exposure and reject that batch for transfers that cannot satisfy the two-day residual-life policy. You can also edit quantities.
+In Mandya → **Inventory management**, edit the expiry of `D-ORS-01` to **6 October 2026** while the scenario is at 5 October. Analysis will recalculate expiry exposure and reject that batch for transfers that cannot satisfy the two-day residual-life policy. You can also edit quantities.
 
 Reserved batches cannot be edited: complete or cancel the relevant transfer first. Every edit records the before/after state, reason and idempotent ledger movement.
 
 ## Dashboard tabs
 
-- **Inventory:** onboarding and current supply position.
-- **Past records:** consumed quantities, movement history and downloads.
-- **Manage inventory:** edit batch quantities and expiry dates.
-- **AI chat:** ask forecasting and operational questions; inspect the forecast chart and arithmetic.
+- **Onboarding:** upload the hospital CSV or inspect import status.
+- **Past usage:** consumed quantities, movement history and downloads.
+- **Inventory management:** edit batch quantities and expiry dates.
 - **Approvals:** conversations, constrained counteroffers, approvals and incoming/outgoing delivery state.
 
-The console has three stages: **Forecast → Find a donor/recipient → Approve & deliver**. Select the hospital, then a product. Only one detailed forecast is shown at a time. Expand **How was this calculated?** for the daily prediction sum, incident adjustments and stock simulation. **Refresh forecast** forces new inference and displays changes in demand, usable stock and coverage against the previous result viewed in this tab. While a job runs, the last completed result remains labelled and visible.
+The console has five stages: **Demand forecast → Find a nearby donor/recipient → AI negotiation → Hospital approvals → Delivery & stock update**. Select a hospital and product from the dropdowns. Only the current stage expands. **How was this calculated?** exposes the actual daily predictions, incident adjustment and stock simulation; the graph and arithmetic use persisted backend results.
 
-Search is enabled only after the backend records an actionable search for that product and run. With **Advance after an actionable refresh** enabled, the console moves to search after the updated forecast is shown. Products without a shortage or unused expiring surplus stay at Forecast. Approval and delivery remain a separate stage; hospital administrators approve in their dashboards.
+**Refresh workflow** starts the walkthrough. The previous forecast remains labelled while inference runs. If the new result warrants a search, the console scrolls through completed search evidence on the map and actual agent messages, then pauses for both administrators. A product without an actionable shortage or unused expiring surplus stops at stage 1. A search without a feasible partner stops at stage 2. No proposal is fabricated to fill an empty stage.
+
+**Follow stages automatically** controls presentation pacing. Short pauses give the viewer time to read results that already exist; they are not artificial model or scanning progress. Clicking a stage pauses following. Completed conversations remain available after delivery. Background analyses do not restart the walkthrough. Approval links preserve the selected hospital and open its approval tab after login.
 
 Forecasts refresh every five wall-clock minutes, and imports, edits and reports queue an immediate run. Unchanged raw inputs may reuse explicitly labelled cached output. Stock edits do not mutate consumption history. The scenario clock does not advance automatically.
 
@@ -82,14 +83,14 @@ Forecasts refresh every five wall-clock minutes, and imports, edits and reports 
 Use **Reset onboarding demo** in the console. It clears synthetic transactions, reports and login sessions, leaves Kaveri empty and reloads the two partner CSVs. Log in again after resetting.
 
 - `OPENAI_API_KEY`: live language-model briefings and chat; backend only.
-- `VITE_CARTO_KEY`: optional CARTO basemap tiles; otherwise the labelled geographic schematic still shows facilities, zones and routes. This browser variable is public configuration, not a secret backend key.
+- `VITE_CARTO_KEY`: optional CARTO Positron tiles; without a key the map uses OpenStreetMap tiles. If tiles fail, a labelled geographic schematic retains facilities, zones and connections. This browser variable is public configuration, not a secret backend key.
 - Local Chronos-2: no AWS key. Public model download needs internet on the first run.
 
 Edit `.env` and restart `make dev` after configuring keys. Live external calls still need verification with your credentials. The remainder of the local demo works without them.
 
 ## Forecast-gated searches and focused console
 
-The console's **Controlled hospital** selector scopes product charts, evidence, proposals and outcomes to one hospital. Opening it from a hospital dashboard passes that hospital in the link. All of that hospital's products have a summary card; selecting one opens its chart and decision: **Find a donor**, **Find a recipient**, or **No search**. Partner forecasts still run from their own imported consumption histories; agents receive their own recent history, planning demand, input hash and model provenance.
+The console's **Controlled hospital** selector scopes product charts, evidence, proposals and outcomes to one hospital. Opening it from a hospital dashboard passes that hospital in the link. The **Product** dropdown opens one product’s chart and decision: **Find a donor**, **Find a recipient**, or **No search**. Partner forecasts still run from their own imported consumption histories; agents receive their own recent history, planning demand, input hash and model provenance.
 
 A donor search requires projected unmet demand of at least one supply pack within the 28-day supported horizon. A recipient search requires at least one whole pack of stock projected to expire unused locally, with no projected shortage at the donor. Expiry alone is not a trigger: stock needed locally is kept. An expiry-rescue recipient must consume the incoming stock before expiry without increasing its own waste. The donor's stress-demand protection, shelf-life margin, handling checks and outbreak exclusions still apply. If no recipient qualifies, the system explains why and does not create a proposal.
 

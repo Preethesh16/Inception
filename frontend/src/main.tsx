@@ -11,7 +11,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={client}>
       {window.location.port !== "5174" &&
       window.location.pathname === "/" &&
-      !window.location.search ? (
+      new URLSearchParams(window.location.search).get("view") !== "console" ? (
         <Landing />
       ) : (
         <App />

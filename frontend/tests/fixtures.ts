@@ -20,6 +20,13 @@ export const test = base.extend({
     await isolated.dispose();
   },
   context: async ({ context }, use) => {
+    // Acceptance tests use the geographic fallback, not public tile bandwidth.
+    await context.route("https://tile.openstreetmap.org/**", (route) =>
+      route.abort(),
+    );
+    await context.route("https://basemaps.cartocdn.com/**", (route) =>
+      route.abort(),
+    );
     const target = process.env.E2E_API_TARGET;
     if (target)
       await context.route("**/api/**", async (route) => {

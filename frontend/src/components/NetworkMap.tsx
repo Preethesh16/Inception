@@ -73,13 +73,40 @@ export function NetworkMap({
             .map((f) => `${f.lat},${f.lng}`)
             .join(";")}
         />
-        {key && !failed && (
+        {!failed && (
           <TileLayer
-            url={`https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key=${key}`}
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attribution">CARTO</a>'
+            url={
+              key
+                ? `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key=${key}`
+                : "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            }
+            attribution={
+              key
+                ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attribution">CARTO</a>'
+                : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }
             eventHandlers={{ tileerror: () => setFailed(true) }}
           />
         )}
+        {focus &&
+          data.facilities
+            .filter((f) => f.id === focus)
+            .map((f) => (
+              <Circle
+                key={f.id + "-scan"}
+                center={[f.lat, f.lng]}
+                radius={2000}
+                pathOptions={{
+                  className: "scan-ring",
+                  color: "#15806a",
+                  weight: 2,
+                  fillOpacity: 0.04,
+                  dashArray: "8 6",
+                }}
+              >
+                <Tooltip>Search origin · {f.name}</Tooltip>
+              </Circle>
+            ))}
         {data.incidents
           .filter((i) => i.supply_id === supply)
           .map((i) => (
@@ -163,7 +190,13 @@ export function NetworkMap({
             eventHandlers={{ click: () => onFacility?.(f.id) }}
           >
             <Tooltip
-              permanent
+              permanent={
+                !focus ||
+                f.id === focus ||
+                data.negotiations.some(
+                  (n) => n.donor === f.id || n.recipient === f.id,
+                )
+              }
               direction="right"
               offset={[12, 0]}
               className="facility-label"
@@ -183,10 +216,9 @@ export function NetworkMap({
       >
         <Layers size={16} /> {heat ? "Demand intensity" : "Layers"}
       </button>
-      {(!key || failed) && (
+      {failed && (
         <div className="map-offline">
-          Geographic schematic ·{" "}
-          {failed ? "tiles unavailable" : "CARTO key not configured"}
+          Geographic schematic · tiles unavailable
         </div>
       )}
       <div className="map-legend">

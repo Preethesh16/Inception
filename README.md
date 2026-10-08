@@ -44,7 +44,7 @@ VITE_CARTO_KEY=your_key
 
 Without OpenAI credentials the assistant clearly reports **deterministic fallback** and explains current computed evidence. With a key it uses OpenAI Responses, strict function schemas and a structured decision response. The API key stays on the backend.
 
-Without a CARTO key, the map is an explicitly labelled geographic schematic. Markers, coordinates, planning zones and transfer connections still work. With a key, Positron tiles render with CARTO and OpenStreetMap attribution. Do not remove attribution.
+Without a CARTO key, the map uses OpenStreetMap tiles with attribution and normal browser caching, following the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). With a key, CARTO Positron is used. If tiles are unavailable, a labelled geographic schematic retains markers, planning zones and connections. Browser tests block public tiles and verify this fallback.
 
 `INCEPTION_FORECAST=baseline` deliberately disables Chronos for fast development. The normal default, `auto`, loads the pinned `amazon/chronos-2` revision on CPU and validates it against two baselines. A missing model or failed download is labelled rather than disguised. Results may be cached; their original compute time and input hash remain visible. **Run live analysis** explicitly bypasses the cache so judges can observe a fresh inference. Report-only updates reuse unchanged raw forecasts and recalculate the planning adjustment.
 
@@ -52,7 +52,7 @@ Without a CARTO key, the map is an explicitly labelled geographic schematic. Mar
 
 Follow [the presenter walkthrough](docs/demo-walkthrough.md). Kaveri starts with empty inventory; upload [its single CSV](demo-data/three-hospital/A-hospital.csv). Chamundi (nearby) and Mandya (outside the planning zone) are preloaded using the same importer. All local demonstration accounts use `Demo@2026`.
 
-Change quantities and expiry dates in **Manage inventory**, report affected supplies and explicit additional outbreak requirements, and observe the live console. It shows actual jobs, forecast mathematics, outbreak-aware donor search, agent conversations, dual approvals, courier receipt and balanced outcomes. Stock reductions affect projected coverage without falsely changing the consumption history.
+Change quantities and expiry dates in **Inventory management**, report affected supplies and explicit additional outbreak requirements, then select the product and press **Refresh workflow** in the console. Its five stages show actual forecast calculations, mapped partner search, agent messages, dual approvals, and a rider simulation backed by transfer events. Hospital navigation has four tabs: Onboarding, Past usage, Inventory management, and Approvals. No approval card is displayed without a stored proposal. Stock reductions affect projected coverage without falsely changing the consumption history.
 
 ## What is implemented
 

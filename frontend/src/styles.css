@@ -3128,3 +3128,326 @@ pre {
     flex-wrap: wrap;
   }
 }
+/* Focused five-stage hospital workflow. */
+.workflow-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 20px;
+  align-items: end;
+  background: white;
+  padding: 24px;
+  border: 1px solid #dfe7e2;
+  border-radius: 14px;
+}
+.workflow-controls label {
+  margin: 0;
+  min-width: 0;
+}
+.workflow-controls select {
+  width: 100%;
+}
+.workflow-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 28px;
+  font-size: 12px;
+  color: #617368;
+}
+.workflow-caption p {
+  margin: 0;
+}
+.workflow-caption label {
+  margin: 0;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.workflow-stop {
+  border: 1px solid #dfe7e2;
+  border-radius: 12px;
+  background: white;
+  margin-bottom: 12px;
+  scroll-margin-top: 20px;
+  overflow: hidden;
+}
+.workflow-stop.is-current {
+  border-color: #8bb6a4;
+  box-shadow: 0 4px 20px #16372806;
+}
+.workflow-stop-heading {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  padding: 20px 24px;
+  color: #355547;
+  cursor: pointer;
+}
+.workflow-stop-heading:disabled {
+  color: #89968f;
+  background: #f9fbfa;
+  cursor: default;
+}
+.workflow-stop-heading strong {
+  flex: 1;
+  font-size: 15px;
+}
+.workflow-stop-heading small {
+  font-size: 11px;
+}
+.stage-number {
+  display: grid;
+  place-items: center;
+  border: 1px solid #ccdcd1;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.is-current .stage-number {
+  background: #176c55;
+  border-color: #176c55;
+  color: white;
+}
+.workflow-stop-body {
+  border-top: 1px solid #e9eeea;
+  padding: 24px;
+}
+.workflow-stop-body > .forecast-summary {
+  border: 0;
+  padding: 0;
+  margin-bottom: 20px;
+}
+.workflow-stop-body .forecast-summary .eyebrow {
+  display: none;
+}
+.stage-result {
+  padding: 14px 18px;
+  background: #eff6f1;
+  border-radius: 9px;
+  color: #355744;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.scan-map {
+  position: relative;
+  margin: 20px 0;
+}
+.scan-map .network-map {
+  height: 370px;
+}
+.scan-map-caption {
+  font-size: 12px;
+  padding: 10px 0;
+  color: #637469;
+}
+.scan-ring {
+  animation: scan-outline 2s linear 2;
+}
+@keyframes scan-outline {
+  to {
+    stroke-dashoffset: -56;
+  }
+}
+.scan-results article {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 0;
+  border-top: 1px solid #e5ebe7;
+  font-size: 13px;
+}
+.scan-results article > div {
+  flex: 1;
+}
+.scan-results p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #64746a;
+}
+.negotiation-thread {
+  margin-bottom: 24px;
+}
+.negotiation-thread h3,
+.approval-wait h3,
+.courier-trip h3 {
+  font-size: 15px;
+  margin: 18px 0 10px;
+}
+.negotiation-thread > p,
+.approval-wait > p,
+.courier-trip > p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #607367;
+}
+.agent-bubble {
+  padding: 18px;
+  background: #f2f6f4;
+  border-radius: 12px;
+  margin: 14px 44px 14px 0;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.agent-bubble.donor-message {
+  margin: 14px 0 14px 44px;
+  background: #eaf4f0;
+}
+.agent-bubble small {
+  color: #74857c;
+  font-size: 11px;
+}
+.agent-bubble p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.approval-wait {
+  padding: 16px 0 24px;
+  border-bottom: 1px solid #e1e9e4;
+}
+.approval-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+.approval-pair > div {
+  border: 1px solid #dce7df;
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+}
+.approval-pair a {
+  font-size: 12px;
+  color: #176c55;
+}
+.courier-trip {
+  margin-bottom: 24px;
+}
+.courier-road {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin: 44px 0 24px;
+  padding: 20px 0;
+}
+.road-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #607467;
+}
+.road-line {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    #b4cdc0 0 8px,
+    transparent 8px 16px
+  );
+}
+.rider {
+  position: absolute;
+  bottom: 8px;
+  color: #137354;
+  transform: translateX(-50%);
+  transition: left 0.9s ease;
+}
+.rider.riding {
+  animation: rider-bob 0.45s ease-in-out infinite alternate;
+}
+@keyframes rider-bob {
+  to {
+    transform: translate(-50%, -3px);
+  }
+}
+.courier-milestones {
+  list-style: none;
+  display: flex;
+  padding: 0;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: #8a968f;
+  margin-bottom: 28px;
+}
+.courier-milestones .passed {
+  color: #176c55;
+  font-weight: 600;
+}
+.delivery-balances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+.delivery-balances > div {
+  padding: 18px;
+  border: 1px solid #dfe7e2;
+  border-radius: 10px;
+}
+.delivery-balances small {
+  display: block;
+  color: #617468;
+  font-size: 11px;
+}
+.delivery-balances strong {
+  display: block;
+  font-size: 26px;
+  color: #30553f;
+  margin-top: 10px;
+}
+@media (max-width: 900px) {
+  .workflow-controls {
+    grid-template-columns: 1fr;
+  }
+  .workflow-caption {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .workflow-stop-heading {
+    padding: 16px;
+    gap: 10px;
+  }
+  .workflow-stop-body {
+    padding: 16px;
+  }
+  .approval-pair,
+  .delivery-balances {
+    grid-template-columns: 1fr;
+  }
+  .agent-bubble {
+    margin-right: 14px;
+  }
+  .agent-bubble.donor-message {
+    margin-left: 14px;
+  }
+  .courier-milestones {
+    flex-wrap: wrap;
+  }
+  .scan-results article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-ring,
+  .rider.riding {
+    animation: none;
+  }
+  .rider {
+    transition: none;
+  }
+}

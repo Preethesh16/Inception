@@ -59,7 +59,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await expect(page.getByText("Hospital data connected")).toBeVisible();
   await waitAnalysis(request);
   await page
-    .getByRole("button", { name: "Manage inventory", exact: true })
+    .getByRole("button", { name: "Inventory management", exact: true })
     .click();
   for (const id of ["A-ORS-01", "A-ORS-02"]) {
     await page.getByRole("button", { name: "Edit " + id, exact: true }).click();
@@ -107,6 +107,24 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
         n.supply_id === "ORS",
     ),
   ).toBe(false);
+  const consolePage = await context.newPage();
+  await consolePage.goto("http://localhost:5174/?hospital=A");
+  await consolePage
+    .getByRole("button", { name: "Refresh workflow", exact: true })
+    .click();
+  await expect(consolePage.locator(".scan-map")).toBeVisible();
+  await consolePage.screenshot({
+    path: "../artifacts/five-stage-search.png",
+    fullPage: true,
+  });
+  await expect(consolePage.locator(".negotiation-thread")).toBeVisible();
+  await expect(consolePage.locator(".approval-wait")).toBeVisible();
+  await expect(
+    consolePage.getByText("Awaiting approval", { exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    consolePage.locator(".workflow-stop-heading").nth(4),
+  ).toBeDisabled();
   await page.getByRole("button", { name: "Approvals", exact: true }).click();
   const proposal = page.locator(`[data-proposal-id="${n.id}"]`);
   await proposal
@@ -131,39 +149,35 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await expect(
     donorProposal.getByText("Reserved", { exact: true }),
   ).toBeVisible();
-  const consolePage = await context.newPage();
-  await consolePage.goto("http://localhost:5174");
-  await expect(
-    consolePage.getByRole("heading", { name: "Every decision, visible." }),
-  ).toBeVisible();
-  await consolePage.getByLabel("Advance after an actionable refresh").uncheck();
+  await expect(consolePage.locator(".courier-simulation")).toBeVisible();
+  const before = await (await request.get("/api/snapshot", { headers })).json();
   await consolePage
-    .getByRole("button", { name: "3 Approve & deliver" })
+    .getByRole("button", { name: "Simulate delivery", exact: true })
     .click();
-  for (const name of [
-    "Claim courier job",
-    "Confirm pickup",
-    "Start transit",
-    "Confirm receipt",
-  ])
-    await consolePage.getByRole("button", { name, exact: true }).click();
+  await expect(
+    consolePage.getByLabel("Rider accepted", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    consolePage.getByText(
+      "Delivery received. Both hospitals’ inventory has been updated.",
+    ),
+  ).toBeVisible();
   await expect(
     consolePage.getByText("Ledger balanced", { exact: true }),
   ).toBeVisible();
-  await expect(
-    consolePage.getByText("Received", { exact: true }).first(),
-  ).toBeVisible();
+  const after = await (await request.get("/api/snapshot", { headers })).json();
+  const stock = (state: any, id: string) =>
+    state.inventory
+      .filter((b: any) => b.facility_id === id && b.supply_id === n.supply_id)
+      .reduce((sum: number, b: any) => sum + b.quantity, 0);
+  expect(stock(after, n.donor)).toBe(stock(before, n.donor) - n.quantity);
+  expect(stock(after, n.recipient)).toBe(
+    stock(before, n.recipient) + n.quantity,
+  );
   await consolePage.screenshot({
-    path: "../artifacts/trio-console.png",
+    path: "../artifacts/five-stage-delivery.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "AI chat", exact: true }).click();
-  await page
-    .getByLabel("Your question")
-    .fill("Which supplies may run out before replenishment?");
-  await page.getByRole("button", { name: "Ask agent", exact: true }).click();
-  await expect(page.locator(".trio-chat article")).toHaveCount(1);
-  await page.screenshot({ path: "../artifacts/trio-chat.png", fullPage: true });
 });
 test("responsive hospital dashboard and landing have no horizontal overflow", async ({
   page,
@@ -195,7 +209,7 @@ test("expiry edits update batch dates and trigger analysis", async ({
   await waitAnalysis(request, 6);
   await login(page, "D");
   await page
-    .getByRole("button", { name: "Manage inventory", exact: true })
+    .getByRole("button", { name: "Inventory management", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Edit D-ORS-01", exact: true })
@@ -229,15 +243,15 @@ test("console shows only the controlled hospital and all its products", async ({
   await expect(page.locator(".forecast-summary")).toHaveCount(0);
   for (const hospital of ["D", "B"]) {
     await page.getByLabel("Controlled hospital").selectOption(hospital);
-    await expect(page.locator(".product-overview button")).toHaveCount(3);
+    await expect(page.locator("select[aria-label=Product] option")).toHaveCount(
+      3,
+    );
     await expect(page.locator(".forecast-summary")).toHaveCount(1);
     const snapshot = await (
       await request.get("/api/snapshot", { headers })
     ).json();
     for (const supply of snapshot.supplies) {
-      await page
-        .getByRole("button", { name: "View " + supply.name, exact: true })
-        .click();
+      await page.getByLabel("Product", { exact: true }).selectOption(supply.id);
       await expect(page.locator(".forecast-summary h2")).toHaveText(
         supply.name,
       );
@@ -249,7 +263,7 @@ test("console shows only the controlled hospital and all its products", async ({
         snapshot.allocation.searches[hospital + ":" + supply.id].kind === "none"
       ) {
         await expect(
-          page.locator(".simple-steps button").nth(1),
+          page.locator(".workflow-stop-heading").nth(1),
         ).toBeDisabled();
       }
     }
@@ -268,24 +282,22 @@ test("refresh explains demand separately from stock and advances only for action
     (s: any) => snapshot.allocation.searches["D:" + s.id].kind === "none",
   );
   expect(safe).toBeTruthy();
-  await page
-    .getByRole("button", { name: "View " + safe.name, exact: true })
-    .click();
+  await page.getByLabel("Product", { exact: true }).selectOption(safe.id);
   const refresh = page.waitForRequest(
     (r) => r.url().endsWith("/api/analysis-runs") && r.method() === "POST",
   );
   await page
-    .getByRole("button", { name: "Refresh forecast", exact: true })
+    .getByRole("button", { name: "Refresh workflow", exact: true })
     .click();
   expect((await refresh).postDataJSON()).toEqual({ force: true });
   await waitAnalysis(request, 6);
   await expect(page.locator(".forecast-change")).toBeVisible();
-  await expect(page.locator(".simple-steps button").nth(0)).toHaveAttribute(
+  await expect(page.locator(".workflow-stop-heading").nth(0)).toHaveAttribute(
     "aria-current",
     "step",
   );
-  await expect(page.locator(".simple-steps button").nth(1)).toBeDisabled();
-  await page.getByRole("button", { name: /View Oral/ }).click();
+  await expect(page.locator(".workflow-stop-heading").nth(1)).toBeDisabled();
+  await page.getByLabel("Product", { exact: true }).selectOption("ORS");
   const oldDemand = await page
     .locator(".simple-numbers strong")
     .first()
@@ -315,11 +327,17 @@ test("refresh explains demand separately from stock and advances only for action
     expect(response.ok()).toBe(true);
   }
   await waitAnalysis(request, 6);
-  await expect(page.locator(".simple-steps button").nth(1)).toHaveAttribute(
+  await expect(
+    page.getByRole("button", { name: "Refresh workflow", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Refresh workflow", exact: true })
+    .click();
+  await expect(page.locator(".workflow-stop-heading").nth(1)).toHaveAttribute(
     "aria-current",
     "step",
   );
-  await page.locator(".simple-steps button").first().click();
+  await page.locator(".workflow-stop-heading").first().click();
   await expect(page.locator(".forecast-change")).toContainText(
     "The demand prediction stayed the same",
   );
@@ -337,4 +355,38 @@ test("refresh explains demand separately from stock and advances only for action
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test("hospital has four tabs, an empty approval inbox, and scoped approval login links", async ({
+  page,
+  request,
+  context,
+}) => {
+  await request.post("/api/demo/onboarding-reset", { headers });
+  await waitAnalysis(request, 6);
+  await login(page, "A");
+  await expect(page.locator(".sidebar nav button")).toHaveText([
+    "Onboarding",
+    "Past usage",
+    "Inventory management",
+    "Approvals",
+  ]);
+  await page.getByRole("button", { name: "Approvals", exact: true }).click();
+  await expect(
+    page.getByText("No approvals waiting.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator("[data-proposal-id]")).toHaveCount(0);
+  const linked = await context.newPage();
+  await linked.goto("http://localhost:5173/hospital/D?tab=approvals");
+  await expect(
+    linked.locator(".trio-hospital-options button.selected"),
+  ).toContainText("Mandya");
+  await linked.getByLabel("Password").fill("Demo@2026");
+  await linked.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(linked.locator("h1")).toHaveText("Approvals");
+  await expect(linked.locator(".trio-identity")).toContainText("Mandya");
+  await page.screenshot({
+    path: "../artifacts/five-stage-hospital.png",
+    fullPage: true,
+  });
 });

@@ -72,6 +72,7 @@ export type Forecast = {
   input_hash: string;
 };
 export type Message = {
+  mode?: string;
   actor: string;
   type: string;
   quantity: number;

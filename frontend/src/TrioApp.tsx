@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  Boxes,
   History,
   SlidersHorizontal,
-  MessageSquare,
+  Bike,
+  PackageCheck,
   CheckCircle2,
   LogOut,
   ArrowRight,
@@ -53,7 +53,9 @@ function Card({
   );
 }
 export function TrioLanding() {
-  const [selected, setSelected] = useState("A");
+  const [selected, setSelected] = useState(
+    new URLSearchParams(location.search).get("login") || "A",
+  );
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,7 +77,12 @@ export function TrioLanding() {
         { email: EMAILS[selected], password },
       );
       sessionStorage.setItem("inception-session-" + selected, r.session);
-      window.location.href = "/hospital/" + selected;
+      window.location.href =
+        "/hospital/" +
+        selected +
+        (new URLSearchParams(location.search).get("tab") === "approvals"
+          ? "?tab=approvals"
+          : "");
     } catch (e) {
       setError(String(e));
     } finally {
@@ -186,10 +193,9 @@ export function TrioLanding() {
   );
 }
 const nav = [
-  ["Inventory", Boxes],
-  ["Past records", History],
-  ["Manage inventory", SlidersHorizontal],
-  ["AI chat", MessageSquare],
+  ["Onboarding", Upload],
+  ["Past usage", History],
+  ["Inventory management", SlidersHorizontal],
   ["Approvals", CheckCircle2],
 ] as const;
 export default function TrioApp() {
@@ -197,7 +203,11 @@ export default function TrioApp() {
     window.location.port === "5174" ||
     new URLSearchParams(location.search).get("view") === "console";
   const actor = consoleMode ? "judge" : location.pathname.split("/")[2] || "A";
-  const [tab, setTab] = useState("Inventory");
+  const [tab, setTab] = useState(
+    new URLSearchParams(location.search).get("tab") === "approvals"
+      ? "Approvals"
+      : "Onboarding",
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(false);
@@ -205,7 +215,13 @@ export default function TrioApp() {
   const authenticated =
     consoleMode || !!sessionStorage.getItem("inception-session-" + actor);
   useEffect(() => {
-    if (!authenticated) location.href = "/";
+    if (!authenticated)
+      location.href =
+        "/?login=" +
+        actor +
+        (new URLSearchParams(location.search).get("tab") === "approvals"
+          ? "&tab=approvals"
+          : "");
   }, [authenticated]);
   const q = useQuery({
     queryKey: ["snapshot", actor],
@@ -315,7 +331,7 @@ export default function TrioApp() {
             <h1>
               {consoleMode
                 ? "Every decision, visible."
-                : tab === "Inventory"
+                : tab === "Onboarding"
                   ? "Your hospital. Your supplies."
                   : tab}
             </h1>
@@ -345,33 +361,27 @@ export default function TrioApp() {
                   Scenario date {date(data.demo.as_of)} · refresh every 5
                   minutes
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy || !!running}
-                  onClick={() => act("/analysis-runs", { force: true })}
-                >
-                  Run fresh forecast
-                </Button>
               </div>
             )}
             {consoleMode ? (
               <Operations data={data} act={act} busy={busy} />
             ) : (
               <>
-                {tab === "Inventory" && (
+                {tab === "Onboarding" && (
                   <>
                     <SingleImport actor={actor} data={data} />
-                    <Inventory data={data} />
                   </>
                 )}
-                {tab === "Manage inventory" && (
-                  <Manage data={data} act={act} busy={busy} />
+                {tab === "Inventory management" && (
+                  <>
+                    <Manage data={data} act={act} busy={busy} />
+                    <details>
+                      <summary>Forecast-based inventory summary</summary>
+                      <Inventory data={data} />
+                    </details>
+                  </>
                 )}{" "}
-                {tab === "Past records" && (
-                  <Records data={data} actor={actor} />
-                )}{" "}
-                {tab === "AI chat" && <Chat actor={actor} data={data} />}{" "}
+                {tab === "Past usage" && <Records data={data} actor={actor} />}{" "}
                 {tab === "Approvals" && (
                   <>
                     <Approvals
@@ -442,7 +452,7 @@ function SingleImport({ actor, data }: { actor: string; data: Snapshot }) {
       }
       sub={
         hospital?.onboarded
-          ? `${hospital.history_rows} historical observations · profile, supply definitions, batches and supplier arrivals imported. A source-linked facility knowledge document is available to your agent.`
+          ? `${hospital.history_rows} consumption records imported. Your inventory and scheduled deliveries are connected. Use Inventory management to update quantities or expiry dates.`
           : "One file contains the hospital profile, supply definitions, inventory batches, consumption history and scheduled replenishments. All rows are validated together."
       }
     >
@@ -739,114 +749,6 @@ function Records({ data, actor }: { data: Snapshot; actor: string }) {
     </>
   );
 }
-function Chat({ actor, data }: { actor: string; data: Snapshot }) {
-  const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<
-    { question: string; answer: string; mode: string; sources: string[] }[]
-  >([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function send(text: string) {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await post<{ answer: string; mode: string; sources: string[] }>(
-        "/assistant/query",
-        actor,
-        { question: text },
-      );
-      setMessages((m) => [...m, { question: text, ...r }]);
-      setQuestion("");
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <Card
-        title="Ask your hospital agent"
-        sub="Natural-language answers use your forecasts, stock, proposals and imported facility knowledge. Live OpenAI answers require a backend API key; deterministic fallback is explicitly labelled."
-      >
-        <div className="trio-actions">
-          {[
-            "Which supplies may run out before replenishment?",
-            "Explain my transfer offers",
-            "Which stock may expire unused?",
-          ].map((t) => (
-            <Button
-              key={t}
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => send(t)}
-            >
-              {t}
-            </Button>
-          ))}
-        </div>
-        <div className="trio-chat">
-          {messages.map((m, i) => (
-            <article key={i}>
-              <strong>{m.question}</strong>
-              <p>{m.answer}</p>
-              <small>
-                {m.mode} · Sources: {m.sources.join(", ")}
-              </small>
-            </article>
-          ))}
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            send(question);
-          }}
-        >
-          <label>
-            Your question
-            <textarea
-              aria-label="Your question"
-              required
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-            />
-          </label>
-          <Button disabled={busy || !question.trim()}>
-            {busy ? "Reading current evidence…" : "Ask agent"}
-          </Button>
-        </form>
-        {error && <p role="alert">{error}</p>}
-      </Card>
-      <Forecasts data={data} />
-    </>
-  );
-}
-function Forecasts({ data }: { data: Snapshot }) {
-  const [sid, setSid] = useState("ORS");
-  const f =
-    data.forecasts.find((f) => f.supply_id === sid) || data.forecasts[0];
-  return (
-    <>
-      <div className="product-switch" aria-label="Choose a supply">
-        {data.supplies.map((s) => (
-          <button
-            key={s.id}
-            className={f?.supply_id === s.id ? "selected" : ""}
-            onClick={() => setSid(s.id)}
-          >
-            {s.name}
-          </button>
-        ))}
-      </div>
-      <ForecastSummary
-        forecast={f}
-        risk={data.risks.find((r) => r.id === f?.id)}
-        supply={data.supplies.find((s) => s.id === f?.supply_id)}
-      />
-    </>
-  );
-}
 function ReportForm({
   data,
   act,
@@ -976,13 +878,17 @@ function Approvals({
 }) {
   const offers = data.negotiations.filter(
     (n) =>
-      !["Needs re-evaluation", "Expired", "Rejected", "Cancelled"].includes(
-        n.status,
-      ),
+      ![
+        "Needs re-evaluation",
+        "Expired",
+        "Rejected",
+        "Cancelled",
+        "Received",
+      ].includes(n.status),
   );
   return (
     <Card
-      title="Agent negotiations & approvals"
+      title="Transfer approvals"
       sub="The allocation engine enforces safe quantities. Agents explain or counterpropose within those limits; both hospitals must approve the same version."
     >
       {offers.length ? (
@@ -998,8 +904,8 @@ function Approvals({
         ))
       ) : (
         <p>
-          No actionable proposals yet. Adjust inventory or report quantified
-          additional demand. Unsafe or unnecessary transfers are not created.
+          No approvals waiting. A recommendation appears here only when the
+          analysis finds a safe, useful transfer.
         </p>
       )}
       <details>
@@ -1249,108 +1155,169 @@ function Operations({
   const [sid, setSid] = useState("ORS");
   const [stage, setStage] = useState(1);
   const [follow, setFollow] = useState(true);
-  const [showMap, setShowMap] = useState(false);
-  const latestRun = useRef(network.demo.latest_run);
-  const section = useRef<HTMLDivElement | null>(null);
+  const [walking, setWalking] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const priorRun = useRef(network.demo.latest_run);
+  const priorJob = useRef<string | undefined>(undefined);
+  const panels = useRef<(HTMLElement | null)[]>([]);
   const active = network.jobs.findLast((j) =>
     ["queued", "running"].includes(j.status),
   );
   const risks = network.allocation?.risks
     ? Object.values(network.allocation.risks)
     : network.risks;
-  const data: Snapshot = {
-    ...network,
-    forecasts: network.forecasts.filter(
-      (f) => f.facility_id === facility && f.supply_id === sid,
-    ),
-    risks: risks.filter(
-      (r) => r.facility_id === facility && r.supply_id === sid,
-    ),
-    inventory: network.inventory.filter(
-      (b) => b.facility_id === facility && b.supply_id === sid,
-    ),
-    negotiations: network.negotiations.filter(
-      (n) =>
-        (n.donor === facility || n.recipient === facility) &&
-        n.supply_id === sid,
-    ),
-    transfers: network.transfers.filter(
-      (t) =>
-        (t.donor === facility || t.recipient === facility) &&
-        t.supply_id === sid,
-    ),
-  };
-  const f = data.forecasts[0];
-  const r = data.risks[0];
+  const forecast = network.forecasts.find(
+    (f) => f.facility_id === facility && f.supply_id === sid,
+  );
+  const risk = risks.find(
+    (r) => r.facility_id === facility && r.supply_id === sid,
+  );
   const supply = network.supplies.find((s) => s.id === sid);
   const gate = network.allocation?.searches?.[facility + ":" + sid];
   const searchNeeded = !!gate && gate.kind !== "none";
-  const offers = data.negotiations.filter(
-    (n) =>
-      !["Needs re-evaluation", "Expired", "Cancelled", "Rejected"].includes(
-        n.status,
-      ),
-  );
-  const canApprove = offers.length > 0 || data.transfers.length > 0;
-  const searchFinished =
+  const searchDone =
     searchNeeded &&
     network.events.some(
       (e) =>
         e.type === "SEARCH_COMPLETED" &&
-        e.run_id === f?.run_id &&
+        e.run_id === forecast?.run_id &&
         e.facilities.includes(facility) &&
         e.details.supply_id === sid,
     );
-  const failed = network.jobs.findLast(
-    (j) => j.id === network.jobs.at(-1)?.id && j.status === "failed",
+  const scoped: Snapshot = {
+    ...network,
+    forecasts: forecast ? [forecast] : [],
+    risks: risk ? [risk] : [],
+    negotiations: network.negotiations.filter(
+      (n) =>
+        n.supply_id === sid &&
+        (n.donor === facility || n.recipient === facility),
+    ),
+    transfers: network.transfers.filter(
+      (t) =>
+        t.supply_id === sid &&
+        (t.donor === facility || t.recipient === facility),
+    ),
+  };
+  const offers = scoped.negotiations.filter(
+    (n) =>
+      ![
+        "Needs re-evaluation",
+        "Expired",
+        "Cancelled",
+        "Rejected",
+        "Received",
+      ].includes(n.status),
   );
+  const threads = offers.length
+    ? offers
+    : scoped.negotiations.filter((n) => n.status === "Received");
+  const briefed =
+    threads.length > 0 &&
+    threads.every((n) =>
+      [n.donor, n.recipient].every((id) =>
+        n.messages.some((m) => m.type === "agent briefing" && m.actor === id),
+      ),
+    );
+  const deliveries = scoped.transfers.filter(
+    (t) => !["Cancelled", "Rejected", "Expired"].includes(t.status),
+  );
+  const approvalComplete =
+    threads.length > 0 &&
+    threads.every((n) => deliveries.some((t) => t.id === n.id));
+  const latestJob = network.jobs.at(-1);
+  const failed = latestJob?.status === "failed";
+  const ready = [
+    true,
+    !!searchDone,
+    threads.length > 0,
+    briefed || deliveries.length > 0,
+    deliveries.length > 0,
+  ];
+  const titles = [
+    "Demand forecast",
+    gate?.kind === "recipient_search"
+      ? "Find a recipient"
+      : "Find a nearby donor",
+    "AI negotiation",
+    "Hospital approvals",
+    "Delivery & stock update",
+  ];
+  const complete = [
+    !!forecast && !active,
+    !!searchDone,
+    briefed,
+    approvalComplete,
+    deliveries.length > 0 && deliveries.every((t) => t.status === "Received"),
+  ];
+
+  function select(next: number, manual = false) {
+    if (manual) setWalking(false);
+    setStage(next);
+  }
   useEffect(() => {
-    if (active) {
-      setStage(1);
+    if (!requested) return;
+    if (failed && latestJob?.id !== priorJob.current) {
+      setRequested(false);
+      setWalking(false);
       return;
     }
-    if (latestRun.current === network.demo.latest_run) return;
-    if (!follow || !searchNeeded) latestRun.current = network.demo.latest_run;
-    if (follow && searchFinished) {
-      const t = setTimeout(() => {
-        latestRun.current = network.demo.latest_run;
-        setStage(2);
-        section.current?.scrollIntoView({
-          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-            ? "instant"
-            : "smooth",
-          block: "start",
-        });
-      }, 1800);
-      return () => clearTimeout(t);
+    if (!active && network.demo.latest_run !== priorRun.current) {
+      setRequested(false);
+      setWalking(true);
     }
+  }, [requested, active?.id, network.demo.latest_run, failed, latestJob?.id]);
+  useEffect(() => {
+    if (!walking || !follow || active || requested) return;
+    let next = 0;
+    if (stage === 1 && searchDone) next = 2;
+    if (stage === 2 && offers.length) next = 3;
+    if (stage === 3 && briefed) next = 4;
+    if (stage === 4 && approvalComplete) next = 5;
+    if (!next) return;
+    // Results already exist; these pauses pace their presentation, not computation.
+    const timer = setTimeout(() => setStage(next), stage === 3 ? 6000 : 2500);
+    return () => clearTimeout(timer);
   }, [
-    active?.id,
-    network.demo.latest_run,
+    walking,
     follow,
-    searchFinished,
-    searchNeeded,
-    facility,
-    sid,
+    stage,
+    active?.id,
+    requested,
+    searchDone,
+    offers.length,
+    briefed,
+    deliveries.length,
+    approvalComplete,
   ]);
   useEffect(() => {
-    if (stage === 2 && !searchNeeded) setStage(1);
-    if (stage === 3 && !canApprove) setStage(1);
-  }, [searchNeeded, canApprove, stage]);
+    if (stage > 1)
+      panels.current[stage - 1]?.scrollIntoView({
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
+  }, [stage]);
+  useEffect(() => {
+    if (stage > 1 && !ready[stage - 1]) setStage(1);
+  }, [stage, searchDone, threads.length, briefed, deliveries.length]);
+  function changeSelection(kind: "hospital" | "product", value: string) {
+    if (kind === "hospital") setFacility(value);
+    else setSid(value);
+    setStage(1);
+    setWalking(false);
+    setRequested(false);
+  }
   return (
-    <div className="simple-operations">
-      <div className="operations-toolbar">
+    <div className="guided-workflow">
+      <div className="workflow-controls">
         <label>
           Hospital
           <select
             aria-label="Controlled hospital"
             value={facility}
-            onChange={(e) => {
-              latestRun.current = network.demo.latest_run;
-              setFacility(e.target.value);
-              setStage(1);
-              setShowMap(false);
-            }}
+            onChange={(e) => changeSelection("hospital", e.target.value)}
           >
             {network.facilities.map((h) => (
               <option key={h.id} value={h.id}>
@@ -1359,267 +1326,340 @@ function Operations({
             ))}
           </select>
         </label>
-        <div>
-          <Button
-            disabled={busy || !!active || !f}
-            onClick={async () => {
-              setStage(1);
-              await act("/analysis-runs", { force: true });
-            }}
+        <label>
+          Product
+          <select
+            aria-label="Product"
+            value={sid}
+            onChange={(e) => changeSelection("product", e.target.value)}
           >
-            {active ? "Calculating…" : "Refresh forecast"}
-          </Button>
-          <small>
-            Reruns demand prediction, then reassesses current stock and reports.
-          </small>
-        </div>
+            {network.supplies.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          disabled={busy || !!active || requested || !forecast}
+          onClick={async () => {
+            priorRun.current = network.demo.latest_run;
+            priorJob.current = latestJob?.id;
+            setStage(1);
+            setWalking(false);
+            setRequested(true);
+            if (!(await act("/analysis-runs", { force: true })))
+              setRequested(false);
+          }}
+        >
+          {active || requested ? "Recalculating…" : "Refresh workflow"}
+        </Button>
       </div>
-      <div className="product-overview" aria-label="Product forecasts">
-        {network.supplies.map((s) => {
-          const risk = risks.find(
-            (r) => r.facility_id === facility && r.supply_id === s.id,
-          );
-          const decision =
-            network.allocation?.searches?.[facility + ":" + s.id];
-          return (
-            <button
-              key={s.id}
-              aria-label={"View " + s.name}
-              aria-pressed={sid === s.id}
-              className={sid === s.id ? "selected" : ""}
-              onClick={() => {
-                latestRun.current = network.demo.latest_run;
-                setSid(s.id);
-                setStage(1);
-                setShowMap(false);
-              }}
-            >
-              <strong>{s.name}</strong>
-              <span>
-                {risk
-                  ? fmt(risk.demand_7) + " " + s.unit + "s expected in 7 days"
-                  : "Awaiting hospital CSV"}
-              </span>
-              <small>
-                {risk
-                  ? fmt(risk.stock) +
-                    " usable · " +
-                    (risk.stockout_days === null
-                      ? "28 days covered"
-                      : days(risk.stockout_days) + " until shortage")
-                  : "No forecast yet"}
-              </small>
-              <Badge
-                tone={
-                  decision?.kind === "none"
-                    ? "green"
-                    : decision
-                      ? "amber"
-                      : "neutral"
-                }
-              >
-                {decision?.kind === "donor_search"
-                  ? "Shortage"
-                  : decision?.kind === "recipient_search"
-                    ? "Unused expiring stock"
-                    : decision
-                      ? "No action needed"
-                      : "Not analysed"}
-              </Badge>
-            </button>
-          );
-        })}
-      </div>
-      <nav className="simple-steps" aria-label="Workflow stages">
-        <button
-          aria-current={stage === 1 ? "step" : undefined}
-          onClick={() => setStage(1)}
-        >
-          <span>1</span>Forecast
-        </button>
-        <button
-          disabled={!searchFinished || !!active}
-          aria-current={stage === 2 ? "step" : undefined}
-          onClick={() => setStage(2)}
-        >
-          <span>2</span>
-          {gate?.kind === "recipient_search"
-            ? "Find a recipient"
-            : "Find a donor"}
-        </button>
-        <button
-          disabled={!canApprove || !!active}
-          aria-current={stage === 3 ? "step" : undefined}
-          onClick={() => setStage(3)}
-        >
-          <span>3</span>Approve & deliver
-        </button>
-      </nav>
-      <div className="workflow-hint">
+      <div className="workflow-caption">
         <p>
-          {active
-            ? "Recalculating. The previous completed forecast remains visible until the new result is ready."
-            : failed
-              ? "Analysis failed. Your previous results remain visible; retry Refresh forecast."
-              : gate?.kind === "none"
-                ? "No action needed. This product’s forecast does not warrant a search."
-                : gate?.kind === "donor_search"
-                  ? "A shortage is projected. The next stage checks eligible donors."
-                  : gate?.kind === "recipient_search"
-                    ? "Some stock will expire unused. The next stage checks who can consume it safely."
-                    : "Import this hospital’s CSV to begin."}
+          Edit inventory in the hospital dashboard, then refresh here to follow
+          the result.
         </p>
         <label>
           <input
             type="checkbox"
             checked={follow}
-            onChange={(e) => setFollow(e.target.checked)}
+            onChange={(e) => {
+              setFollow(e.target.checked);
+              if (e.target.checked) setWalking(true);
+            }}
           />{" "}
-          Advance after an actionable refresh
+          Follow stages automatically
         </label>
       </div>
       {failed && (
-        <p role="alert" className="text-red">
-          {failed.error}
+        <p role="alert" className="notice notice-danger">
+          Analysis failed: {latestJob.error}. Refresh to retry.
         </p>
       )}
-      <div ref={section} className="simple-stage-content">
-        {stage === 1 && (
-          <>
-            <ForecastSummary
-              forecast={f}
-              risk={r}
-              supply={supply}
-              updating={!!active}
-            />
-            {f && (
-              <div className="next-action">
-                <strong>
-                  {active
-                    ? "Reassessing whether a search is needed…"
-                    : searchNeeded
-                      ? gate?.kind === "donor_search"
-                        ? "Next: find stock for the projected shortage."
-                        : "Next: find a hospital that can use the expiring stock."
-                      : "Analysis complete. No search is needed."}
-                </strong>
-                {searchNeeded && (
-                  <Button
-                    disabled={!searchFinished || !!active}
-                    onClick={() => setStage(2)}
-                  >
-                    View search results <ArrowRight size={15} />
-                  </Button>
+      <div className="workflow-rail" aria-label="Workflow stages">
+        {titles.map((title, index) => (
+          <section
+            key={index}
+            ref={(el) => {
+              panels.current[index] = el;
+            }}
+            className={
+              "workflow-stop " + (stage === index + 1 ? "is-current" : "")
+            }
+          >
+            <button
+              className="workflow-stop-heading"
+              disabled={!ready[index]}
+              aria-expanded={stage === index + 1}
+              aria-current={stage === index + 1 ? "step" : undefined}
+              onClick={() => select(index + 1, true)}
+            >
+              <span className="stage-number">{index + 1}</span>
+              <strong>{title}</strong>
+              <small>
+                {index === 0 && (active || requested)
+                  ? "Calculating"
+                  : !ready[index]
+                    ? "Waiting"
+                    : complete[index]
+                      ? [
+                          "Calculated",
+                          "Complete",
+                          "Complete",
+                          "Approved",
+                          "Delivered",
+                        ][index]
+                      : index === 3
+                        ? "Awaiting approval"
+                        : "In progress"}
+              </small>
+            </button>
+            {stage === index + 1 && (
+              <div className="workflow-stop-body">
+                {stage === 1 && (
+                  <>
+                    <ForecastSummary
+                      forecast={forecast}
+                      risk={risk}
+                      supply={supply}
+                      updating={!!active || requested}
+                    />
+                    <p className="stage-result">
+                      {active || requested
+                        ? "Running the forecast and checking current batches, expiry and arrivals…"
+                        : gate?.kind === "none"
+                          ? "No transfer needed. This workflow stops here."
+                          : gate?.reason || "Upload the hospital CSV to begin."}
+                    </p>
+                    {searchDone && !active && !requested && (
+                      <Button
+                        onClick={() => {
+                          setWalking(true);
+                          select(2);
+                        }}
+                      >
+                        Continue to hospital search <ArrowRight size={15} />
+                      </Button>
+                    )}
+                  </>
                 )}
-                {!searchNeeded && canApprove && (
-                  <Button variant="outline" onClick={() => setStage(3)}>
-                    Review existing partner proposals
-                  </Button>
+                {stage === 2 && (
+                  <>
+                    <p className="stage-result">
+                      Search complete. Eligibility was calculated from the
+                      connected hospitals’ forecasts, usable stock, expiry and
+                      outbreak restrictions.
+                    </p>
+                    <div className="scan-map">
+                      <NetworkMap
+                        data={{ ...network, negotiations: offers }}
+                        supply={sid}
+                        focus={facility}
+                      />
+                      <div className="scan-map-caption">
+                        Geographic search results ·{" "}
+                        {offers.length ? "safe match found" : "no safe match"}
+                      </div>
+                    </div>
+                    <div className="scan-results">
+                      {network.facilities
+                        .filter((h) => h.id !== facility)
+                        .map((h) => {
+                          const matches = offers.filter(
+                            (n) => n.donor === h.id || n.recipient === h.id,
+                          );
+                          const reasons =
+                            network.allocation?.rejected.filter(
+                              (x) =>
+                                x.facility_id === h.id && x.supply_id === sid,
+                            ) || [];
+                          const inZone = network.incidents.some(
+                            (i) =>
+                              i.supply_id === sid &&
+                              Math.hypot(
+                                (h.lat - i.center.lat) * 111,
+                                (h.lng - i.center.lng) *
+                                  111 *
+                                  Math.cos((h.lat * Math.PI) / 180),
+                              ) <= i.radius_km,
+                          );
+                          return (
+                            <article key={h.id}>
+                              <div>
+                                <strong>{h.name}</strong>
+                                <p>
+                                  {matches.length
+                                    ? matches
+                                        .map(
+                                          (n) =>
+                                            `${fmt(n.quantity)} ${supply?.unit}s available for this transfer · ${n.travel_hours} h simulated travel`,
+                                        )
+                                        .join("; ")
+                                    : reasons.length
+                                      ? [
+                                          ...new Set(
+                                            reasons.map((x) => x.reason),
+                                          ),
+                                        ].join(" · ")
+                                      : inZone
+                                        ? "Inside the operational planning zone; excluded from automatic donation."
+                                        : "No feasible allocation selected for this hospital."}
+                                </p>
+                              </div>
+                              <Badge
+                                tone={matches.length ? "green" : "neutral"}
+                              >
+                                {matches.length ? "Selected" : "Not selected"}
+                              </Badge>
+                            </article>
+                          );
+                        })}
+                    </div>
+                    <p className="microcopy">
+                      The backend selects the nearest feasible hospital using
+                      the demo travel-time matrix. Lines show connections, not
+                      road navigation.
+                    </p>
+                    {offers.length ? (
+                      <Button
+                        onClick={() => {
+                          setWalking(true);
+                          select(3);
+                        }}
+                      >
+                        View negotiation <ArrowRight size={15} />
+                      </Button>
+                    ) : (
+                      <p className="stage-result">
+                        No safe transfer is possible. The unmet requirement
+                        remains open; no approval has been created.
+                      </p>
+                    )}
+                  </>
+                )}
+                {stage === 3 && (
+                  <>
+                    <p className="microcopy">
+                      Messages below are stored outputs from the hospital agents
+                      and constrained allocation engine. Live OpenAI messages
+                      appear when the backend API key is configured; fallback
+                      messages are labelled.
+                    </p>
+                    {threads.map((n) => (
+                      <article key={n.id} className="negotiation-thread">
+                        <h3>
+                          {NAME[n.donor]} → {NAME[n.recipient]}
+                        </h3>
+                        <p>
+                          {fmt(n.quantity)} {supply?.unit}s · safe limit{" "}
+                          {fmt(n.max_quantity)} · version {n.version}
+                        </p>
+                        {n.messages.map((m, i) => (
+                          <div
+                            key={i}
+                            className={
+                              "agent-bubble " +
+                              (m.actor === n.donor ? "donor-message" : "")
+                            }
+                          >
+                            <strong>
+                              {NAME[m.actor] || m.actor} · {m.type}
+                            </strong>
+                            <p>{m.text}</p>
+                            <small>
+                              {m.mode || "Deterministic allocation message"} ·{" "}
+                              {new Date(m.at).toLocaleTimeString()}
+                            </small>
+                          </div>
+                        ))}
+                      </article>
+                    ))}
+                    {!briefed ? (
+                      <p role="status">
+                        Waiting for both hospital agents to finish evaluating
+                        the proposal…
+                      </p>
+                    ) : (
+                      <Button
+                        onClick={() => {
+                          setWalking(true);
+                          select(4);
+                        }}
+                      >
+                        Continue to approvals <ArrowRight size={15} />
+                      </Button>
+                    )}
+                  </>
+                )}
+                {stage === 4 && (
+                  <>
+                    <p>
+                      Both hospital administrators must approve the same terms.
+                      Stock is reserved only after both approvals pass
+                      validation.
+                    </p>
+                    {threads.map((n) => (
+                      <article
+                        className="approval-wait"
+                        key={n.id}
+                        data-proposal-id={n.id}
+                      >
+                        <h3>
+                          {fmt(n.quantity)} {supply?.unit}s · version{" "}
+                          {n.version}
+                        </h3>
+                        <p>{n.reason}</p>
+                        <div className="approval-pair">
+                          {[n.donor, n.recipient].map((id) => (
+                            <div key={id}>
+                              <strong>{NAME[id]}</strong>
+                              <Badge
+                                tone={
+                                  n.approvals.includes(id) ? "green" : "amber"
+                                }
+                              >
+                                {n.approvals.includes(id)
+                                  ? "Approved"
+                                  : "Awaiting approval"}
+                              </Badge>
+                              <a
+                                href={
+                                  "http://localhost:5173/hospital/" +
+                                  id +
+                                  "?tab=approvals"
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open hospital dashboard ↗
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                    {deliveries.length > 0 && (
+                      <Button onClick={() => select(5)}>
+                        Continue to delivery <ArrowRight size={15} />
+                      </Button>
+                    )}
+                  </>
+                )}
+                {stage === 5 && (
+                  <CourierSimulation
+                    data={{ ...scoped, transfers: deliveries }}
+                    act={act}
+                    busy={busy}
+                  />
                 )}
               </div>
             )}
-          </>
-        )}
-        {stage === 2 && (
-          <>
-            <Card
-              title={
-                gate?.kind === "recipient_search"
-                  ? "Who can use this stock?"
-                  : "Where can we safely get stock?"
-              }
-              sub={gate?.reason}
-            >
-              <div className="search-summary">
-                <span>
-                  Supply: <strong>{supply?.name}</strong>
-                </span>
-                <span>
-                  {gate?.kind === "recipient_search"
-                    ? "Unused expiring stock: "
-                    : "Projected unmet demand: "}
-                  <strong>
-                    {fmt(
-                      gate?.kind === "recipient_search"
-                        ? gate?.unused_expiring_units
-                        : gate?.shortage_units,
-                    )}{" "}
-                    {supply?.unit}s
-                  </strong>
-                </span>
-              </div>
-              {offers.length ? (
-                <div className="candidate-list">
-                  {offers.map((n) => (
-                    <article key={n.id}>
-                      <div>
-                        <strong>
-                          {NAME[n.donor]} → {NAME[n.recipient]}
-                        </strong>
-                        <p>{n.reason}</p>
-                      </div>
-                      <b>
-                        {fmt(n.quantity)} {supply?.unit}s
-                      </b>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p>
-                  No safe match was found. No negotiation or inventory movement
-                  has been invented.
-                </p>
-              )}
-              <details>
-                <summary>Why were other candidates excluded?</summary>
-                {network.allocation?.rejected
-                  .filter((x) => x.supply_id === sid)
-                  .map((x, i) => (
-                    <p key={i}>
-                      <strong>{NAME[x.facility_id]}</strong>: {x.reason}
-                    </p>
-                  ))}
-              </details>
-              <Button variant="ghost" onClick={() => setShowMap(!showMap)}>
-                {showMap ? "Hide outbreak map" : "Show outbreak checks and map"}
-              </Button>
-              {showMap && <NetworkMap data={network} supply={sid} />}
-            </Card>
-            <div className="next-action">
-              <strong>
-                {canApprove
-                  ? "A proposal is available for hospital review."
-                  : "Search complete. No feasible transfer to approve."}
-              </strong>
-              {canApprove && (
-                <Button onClick={() => setStage(3)}>
-                  Review negotiation <ArrowRight size={15} />
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-        {stage === 3 && (
-          <>
-            <div className="notice notice-info">
-              Approve from each hospital’s dashboard. This console can show the
-              conversation and simulate delivery; it cannot approve on a
-              hospital’s behalf.
-            </div>
-            <Approvals data={data} actor="judge" act={act} busy={busy} />
-            <Deliveries data={data} actor="judge" act={act} busy={busy} />
-            <p>
-              <Badge tone={network.reconciliation?.balanced ? "green" : "red"}>
-                {network.reconciliation?.balanced
-                  ? "Ledger balanced"
-                  : "Review ledger"}
-              </Badge>
-            </p>
-          </>
-        )}
+          </section>
+        ))}
       </div>
       <details className="operations-tools">
-        <summary>Demo tools & downloads</summary>
+        <summary>Data downloads & demo reset</summary>
         <div className="file-downloads">
           {[
             "observations",
@@ -1649,6 +1689,135 @@ function Operations({
           Reset onboarding demo
         </Button>
       </details>
+    </div>
+  );
+}
+function CourierSimulation({
+  data,
+  act,
+  busy,
+}: {
+  data: Snapshot;
+  act: (p: string, b?: unknown) => Promise<boolean>;
+  busy: boolean;
+}) {
+  const [simulating, setSimulating] = useState<string | null>(null);
+  const states = [
+    "Reserved",
+    "Assigned",
+    "Picked up",
+    "In transit",
+    "Received",
+  ];
+  const labels = [
+    "Ready for rider",
+    "Rider accepted",
+    "Picked up",
+    "On the way",
+    "Delivered",
+  ];
+  return (
+    <div className="courier-simulation">
+      <p className="microcopy">
+        Simulated courier. Each step records a real transfer event; pickup
+        removes donor stock and receipt adds recipient stock.
+      </p>
+      {data.transfers.map((t) => {
+        const progress = Math.max(0, states.indexOf(t.status));
+        return (
+          <article key={t.id} className="courier-trip">
+            <h3>
+              {NAME[t.donor]} → {NAME[t.recipient]}
+            </h3>
+            <p>
+              {fmt(t.quantity)}{" "}
+              {data.supplies.find((s) => s.id === t.supply_id)?.unit}s ·{" "}
+              {t.status}
+            </p>
+            <div className="courier-road" aria-label={labels[progress]}>
+              <span className="road-end">Pickup</span>
+              <div className="road-line">
+                <Bike
+                  size={32}
+                  className={progress === 3 ? "rider riding" : "rider"}
+                  style={{ left: `${progress * 25}%` }}
+                />
+              </div>
+              <span className="road-end">
+                <PackageCheck size={24} />
+                Delivery
+              </span>
+            </div>
+            <ol className="courier-milestones">
+              {labels.map((label, i) => (
+                <li key={label} className={i <= progress ? "passed" : ""}>
+                  {label}
+                </li>
+              ))}
+            </ol>
+            {t.status !== "Received" && (
+              <Button
+                disabled={busy || !!simulating}
+                onClick={async () => {
+                  setSimulating(t.id);
+                  try {
+                    for (const command of [
+                      "claim",
+                      "pickup",
+                      "transit",
+                      "receive",
+                    ].slice(progress)) {
+                      if (!(await act("/transfers/" + t.id + "/" + command)))
+                        break;
+                      await new Promise((resolve) => setTimeout(resolve, 1200));
+                    }
+                  } finally {
+                    setSimulating(null);
+                  }
+                }}
+              >
+                {simulating === t.id
+                  ? "Rider simulation running…"
+                  : "Simulate delivery"}
+              </Button>
+            )}
+            {t.status === "Received" && (
+              <p className="stage-result" role="status">
+                Delivery received. Both hospitals’ inventory has been updated.
+              </p>
+            )}
+            <div className="delivery-balances">
+              {[t.donor, t.recipient].map((id) => (
+                <div key={id}>
+                  <small>{NAME[id]} · on hand</small>
+                  <strong>
+                    {fmt(
+                      data.inventory
+                        .filter(
+                          (b) =>
+                            b.facility_id === id && b.supply_id === t.supply_id,
+                        )
+                        .reduce((sum, b) => sum + b.quantity, 0),
+                    )}
+                  </strong>
+                </div>
+              ))}
+            </div>
+          </article>
+        );
+      })}
+      <details>
+        <summary>Manual courier controls</summary>
+        <Deliveries
+          data={data}
+          actor="judge"
+          act={act}
+          busy={busy || !!simulating}
+        />
+      </details>
+      <Badge tone={data.reconciliation?.balanced ? "green" : "red"}>
+        {data.reconciliation?.balanced ? "Ledger balanced" : "Review ledger"}
+      </Badge>
     </div>
   );
 }
