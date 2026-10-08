@@ -2,7 +2,7 @@
 
 Measured in this workspace on 2026-10-08.
 
-- **42 backend tests passed**: rubric arithmetic, FEFO expiry, fractional arrival timing, missing-data handling, no future leakage, anomaly clustering, competing recipients, donor protection, no-donor escalation, role scope, CSV atomicity, counteroffer caps, approval versioning, duplicate receipts, concurrent reservation, cancellation, expiry cleanup, structured OpenAI tool-loop mock, and forced inference request.
+- **46 backend tests passed**: rubric arithmetic, FEFO expiry, fractional arrival timing, missing-data handling, no future leakage, anomaly clustering, competing recipients, donor protection, no-donor escalation, role scope, CSV atomicity, counteroffer caps, approval versioning, duplicate receipts, concurrent reservation, cancellation, expiry cleanup, structured OpenAI tool-loop mock, and forced inference request.
 - **Browser transfer acceptance passed** on both ports: report, rejected over-limit counteroffer, buyer approval, donor approval, courier claim/pickup/transit/receipt, balanced ledger, dataset download, outcome replay.
 - **390 px mobile check passed** after correcting action-button wrapping; no page-level horizontal overflow.
 - **Production frontend build passed**, with chart/map/workflow code split into separate chunks.
@@ -16,9 +16,9 @@ Independent synthetic seeds 2027 and 2028 selected Chronos-2 over both baselines
 
 These tests are small synthetic scenarios, not clinical validation or evidence of generalisation to real hospital demand.
 
-## Not externally verified
+## External-service verification
 
-- A real OpenAI request was not executed because no API key was configured. The actual SDK integration is implemented; its strict tool loop is tested with a mock, and the no-key fallback was exercised in the browser/backend tests.
+- Live OpenAI negotiation and scoped inventory/policy tool calls passed in an isolated database using the configured key. See `docs/live-agent-validation.md` and the local `artifacts/live-agent-test.json`. No live credentials are used by ordinary unit tests.
 - CARTO tile service rendering was not exercised because no tile API key was configured. The labelled geographic fallback was exercised. Automated browser tests deliberately block public map tiles; online OpenStreetMap tile rendering is not claimed by those tests.
 - Courier movement is an intentional simulation; no real dispatch or hospital-system integration is attempted.
 

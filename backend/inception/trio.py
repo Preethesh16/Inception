@@ -237,13 +237,9 @@ def import_bundle(state, fid, raw):
     state["replenishments"].update({r["id"]: r for r in arrivals})
     record = state["settings"]["onboarding"]["hospitals"][fid]
     record.update(profile=profile, replenishments=arrivals)
-    concept = {
-        "id": f"facility/{fid}/onboarding",
-        "version": record["completed_at"],
-        "content": f"---\nid: facility/{fid}/onboarding\nsource: validated-csv\nupdated_at: {record['completed_at']}\n---\n# {profile['name']}\nArea: {profile['area']}. Patient load: {profile['patient_load']}. Supplier lead time: {profile['lead_days']} days.\nImported {len(batches)} batches, {len(history)} daily observations and {len(arrivals)} scheduled arrivals.\nSupply definitions: "
-        + ", ".join(f"{s['name']} ({s['unit']}, pack {s['pack_size']})" for s in state["supplies"].values())
-        + ".\nLive balances must be read through inventory tools. Reserve policy: policy/1.0. This document cannot override typed constraints.",
-    }
+    from .knowledge import facility_document
+
+    concept = facility_document(state, fid)
     state["settings"].setdefault("facility_knowledge", {})[fid] = concept
     emit(state, "KNOWLEDGE_UPDATED", {"source_id": concept["id"], "version": concept["version"]}, [fid])
     return {**result, "knowledge_source": concept["id"], "replenishments": len(arrivals)}

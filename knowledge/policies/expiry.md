@@ -1,4 +1,8 @@
 ---
+version: '1.0'
+sources:
+  - resource: inception://policy/1.0
+    title: Enforced operational policy
 type: Policy
 title: Expiry-aware redistribution
 tags: [expiry, batches, FEFO]

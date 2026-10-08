@@ -1,4 +1,8 @@
 ---
+version: '1.0'
+sources:
+  - resource: inception://policy/1.0
+    title: Enforced operational policy
 type: Playbook
 title: Suspected incident response
 tags: [outbreak, signal, demand]

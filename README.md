@@ -136,3 +136,8 @@ No additional paid service is required for the deterministic local demonstration
 ### Search triggers and console scope
 
 Search is forecast-gated per facility and supply. Pack-sized unmet demand triggers donor search; genuinely unused expiring stock triggers recipient search, preserving protected donor demand and requiring recipient consumption before expiry. No actionable risk means no search. Partner agents use their own imported history and forecast evidence. The console selects one controlled hospital and shows each of its products separately.
+
+
+### Agent knowledge and live tests
+
+See [hospital agents and OKF knowledge](docs/agent-knowledge.md) for retrieval, per-hospital/product scoping, policy provenance and the opt-in live API test. `make test` does not use paid API credentials.

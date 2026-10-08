@@ -3,6 +3,8 @@ import tempfile
 
 os.environ["INCEPTION_DATA_DIR"] = tempfile.mkdtemp(prefix="inception-tests-")
 os.environ["INCEPTION_FORECAST"] = "baseline"
+# Unit tests must never spend the locally configured live API key.
+os.environ["OPENAI_API_KEY"] = ""
 import copy
 import pytest
 from inception.store import Store

@@ -308,16 +308,33 @@ def in_zone(state, fid, sid):
     )
 
 
+def donor_protection(state, forecast):
+    """Exact reserve arithmetic shared by donor validation and agent evidence."""
+    lead = state["facilities"][forecast["facility_id"]]["lead_days"]
+    horizon = max(POLICY["protection_min_days"], lead + POLICY["lead_margin_days"])
+    supported = horizon <= POLICY["horizon"]
+    stress_units = sum(forecast["stress"][:horizon]) if supported else None
+    buffer = forecast["normal_daily"] * POLICY["donor_buffer_days"]
+    return {
+        "horizon_days": horizon,
+        "supported": supported,
+        "higher_path_units": stress_units,
+        "normal_day_buffer_units": buffer,
+        "protected_units": stress_units + buffer if supported else None,
+        "note": "Protect the higher demand path plus a normal-demand unit buffer; do not describe this as an extra stress-coverage day. This requirement alone is not a transfer cap: batch expiry, arrivals, reservations and other recipients also constrain release.",
+    }
+
+
 def donor_safe(state, fid, sid, removals):
     fc = state["forecasts"].get(f"{fid}:{sid}")
     if not fc:
         return False
-    lead = state["facilities"][fid]["lead_days"]
-    horizon = max(POLICY["protection_min_days"], lead + POLICY["lead_margin_days"])
-    if horizon > POLICY["horizon"]:
+    protection = donor_protection(state, fc)
+    horizon = protection["horizon_days"]
+    if not protection["supported"]:
         return False
     demand = fc["stress"][:horizon].copy()
-    demand[-1] += fc["normal_daily"] * POLICY["donor_buffer_days"]
+    demand[-1] += protection["normal_day_buffer_units"]
     sim = simulate(
         batches_for(state, fid, sid),
         demand,
