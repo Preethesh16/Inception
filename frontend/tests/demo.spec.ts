@@ -117,7 +117,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
         document.querySelectorAll(".workflow-stop-heading"),
       );
       const stage = headings.findIndex(
-        (el) => el.getAttribute("aria-expanded") === "true",
+        (el) => el.getAttribute("aria-current") === "step",
       );
       if (stage !== previous && stage >= 0) {
         performance.mark("visible-demo-stage-" + stage);
@@ -126,7 +126,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     }).observe(document.body, {
       subtree: true,
       attributes: true,
-      attributeFilter: ["aria-expanded"],
+      attributeFilter: ["aria-current"],
     });
   });
   await consolePage
@@ -138,7 +138,14 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     await expect(heading).toHaveAttribute("aria-expanded", "true");
     await expect(heading).toBeInViewport();
     await expect(heading).toBeFocused();
-    await expect(consolePage.locator(".workflow-stop-body")).toHaveCount(1);
+    await expect(consolePage.locator(".workflow-stop-body")).toHaveCount(
+      index + 1,
+    );
+    if (index > 0) {
+      await expect
+        .poll(() => consolePage.evaluate(() => window.scrollY))
+        .toBeGreaterThan(300);
+    }
   };
   await assertOpenStage(1);
   await consolePage.screenshot({

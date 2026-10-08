@@ -1364,14 +1364,19 @@ function Operations({
     return () => clearTimeout(timer);
   }, [stage, canAdvance]);
   useLayoutEffect(() => {
-    // Expand the new panel first, then position its heading after layout.
-    // Smooth scrolling can land at the old offset as the previous panel collapses.
+    // Keep completed panels mounted so the next stage stays below them.
+    // Scroll after the new panel has expanded and its layout is committed.
     const frame = requestAnimationFrame(() => {
       const heading = panels.current[
         stage - 1
       ]?.querySelector<HTMLButtonElement>(".workflow-stop-heading");
       heading?.focus({ preventScroll: true });
-      heading?.scrollIntoView({ behavior: "instant", block: "start" });
+      heading?.scrollIntoView({
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
     });
     return () => cancelAnimationFrame(frame);
   }, [stage]);
@@ -1493,7 +1498,7 @@ function Operations({
                 <button
                   className="workflow-stop-heading"
                   disabled={!ready[index]}
-                  aria-expanded={stage === index + 1}
+                  aria-expanded={index + 1 <= stage && ready[index]}
                   aria-current={stage === index + 1 ? "step" : undefined}
                   onClick={() => select(index + 1, true)}
                 >
@@ -1517,9 +1522,9 @@ function Operations({
                             : "In progress"}
                   </small>
                 </button>
-                {stage === index + 1 && (
+                {index + 1 <= stage && ready[index] && (
                   <div className="workflow-stop-body">
-                    {stage === 1 && (
+                    {index === 0 && (
                       <>
                         <ForecastSummary
                           forecast={forecast}
@@ -1547,7 +1552,7 @@ function Operations({
                         )}
                       </>
                     )}
-                    {stage === 2 && (
+                    {index === 1 && (
                       <>
                         <p className="stage-result">
                           Search complete. Eligibility was calculated from the
@@ -1651,7 +1656,7 @@ function Operations({
                         )}
                       </>
                     )}
-                    {stage === 3 && (
+                    {index === 2 && (
                       <>
                         <p className="microcopy">
                           Messages below are stored outputs from the hospital
@@ -1706,7 +1711,7 @@ function Operations({
                         )}
                       </>
                     )}
-                    {stage === 4 && (
+                    {index === 3 && (
                       <>
                         <p>
                           Both hospital administrators must approve the same
@@ -1762,7 +1767,7 @@ function Operations({
                         )}
                       </>
                     )}
-                    {stage === 5 && (
+                    {index === 4 && (
                       <CourierSimulation
                         data={{ ...scoped, transfers: deliveries }}
                         act={act}
