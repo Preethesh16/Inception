@@ -498,7 +498,9 @@ for (const exitMethod of ["button", "logo"] as const) {
         .getByRole("link", { name: "Log out and return to login", exact: true })
         .click();
     await expect(hospital).toHaveURL("http://localhost:5173/");
-    await expect(hospital.getByRole("status")).toContainText(
+    await expect(
+      hospital.getByRole("status").filter({ hasText: "Kaveri’s CSV import" }),
+    ).toContainText(
       "Kaveri’s CSV import, inventory and forecasts have been cleared",
     );
     await expect(otherHospitalTab).toHaveURL("http://localhost:5173/?login=A");

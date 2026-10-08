@@ -3452,3 +3452,345 @@ pre {
     transition: none;
   }
 }
+
+/* Clinical 3D network landing */
+.trio-landing {
+  background: #f7faf8;
+  padding: 30px max(24px, 5vw);
+}
+.trio-landing > header {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+.trio-landing main {
+  max-width: 1320px;
+  margin: 48px auto 28px;
+}
+.network-hero {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 48px;
+  align-items: center;
+  padding: 8px 0 44px;
+}
+.network-hero-copy {
+  padding: 16px 0;
+}
+.network-hero-copy > .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+}
+.hero-eyebrow-line {
+  height: 1px;
+  width: 24px;
+  background: #36846b;
+}
+.network-hero-copy h1 {
+  font-size: clamp(42px, 4.5vw, 68px);
+  letter-spacing: -3px;
+  line-height: 1.06;
+  margin: 25px 0 22px;
+  color: #183e36;
+  font-weight: 550;
+}
+.network-hero-copy .landing-lead {
+  max-width: 380px;
+  font-size: 20px;
+  line-height: 1.5;
+  color: #345c50;
+}
+.hero-description {
+  max-width: 390px;
+  margin: 16px 0 26px;
+  line-height: 1.85;
+  font-size: 14px;
+  color: #708279;
+}
+.hero-login-link {
+  display: inline-flex;
+  gap: 25px;
+  align-items: center;
+  background: #1c6553;
+  color: white;
+  padding: 14px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 6px 16px #194c3512;
+  transition: background 0.2s;
+}
+.hero-login-link:hover {
+  background: #134b3d;
+}
+.hero-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+  color: #6b8076;
+  font-size: 10px;
+}
+.hero-capabilities span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.hero-capabilities span::before {
+  content: "";
+  height: 4px;
+  width: 4px;
+  background: #85ae91;
+  border-radius: 50%;
+}
+.hospital-network {
+  position: relative;
+  min-width: 0;
+  border: 1px solid #dee8e1;
+  border-radius: 24px;
+  background: radial-gradient(ellipse at 50% 42%, #fff, #edf4ee);
+  overflow: hidden;
+  box-shadow: 0 20px 60px -35px #365b4250;
+}
+.network-topline {
+  position: absolute;
+  top: 24px;
+  left: 25px;
+  right: 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+  pointer-events: none;
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: #6a8174;
+}
+.network-topline > span:first-child {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.network-status-dot {
+  width: 6px;
+  height: 6px;
+  background: #37866b;
+  border-radius: 50%;
+}
+.network-canvas {
+  height: 365px;
+  width: 100%;
+  cursor: pointer;
+}
+.network-canvas canvas {
+  display: block;
+  touch-action: pan-y;
+}
+.network-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -4px 25px 17px;
+  position: relative;
+}
+.network-caption > span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #5c786a;
+}
+.network-caption > button {
+  display: grid;
+  place-items: center;
+  background: #ffffffb8;
+  border: 1px solid #d5e2d9;
+  color: #456858;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+}
+.network-facilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 0 20px;
+}
+.network-facilities button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff80;
+  color: #657c70;
+  border: 1px solid #dce7df;
+  border-radius: 8px;
+  padding: 12px 10px;
+  font-size: 11px;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.network-facilities button > span {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  width: 20px;
+  border-radius: 5px;
+  background: #eaf1ec;
+  font-size: 9px;
+}
+.network-facilities button > svg {
+  margin-left: auto;
+}
+.network-facilities button[aria-pressed="true"] {
+  background: white;
+  border-color: #4b977d;
+  color: #225a47;
+  box-shadow: 0 2px 8px #23583e08;
+}
+.network-facilities button[aria-pressed="true"] > span {
+  background: #246e55;
+  color: white;
+}
+.network-disclaimer {
+  text-align: center;
+  color: #819487;
+  font-size: 9px;
+  padding: 15px 10px;
+  letter-spacing: 0.3px;
+}
+.network-loading {
+  height: 480px;
+  display: grid;
+  place-items: center;
+  color: #6a8174;
+}
+.network-fallback {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: #708579;
+  font-size: 11px;
+}
+.network-fallback svg {
+  width: 100%;
+  max-height: 300px;
+}
+.login-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid #dce5de;
+  padding-top: 30px;
+  scroll-margin-top: 24px;
+}
+.login-section-heading h2 {
+  margin-top: 10px;
+  font-size: 24px;
+  font-weight: 550;
+  letter-spacing: -0.7px;
+}
+.login-section-heading > p {
+  color: #7b8b80;
+  font-size: 12px;
+}
+.trio-landing .trio-login-grid {
+  margin-top: 24px;
+  gap: 24px;
+}
+.trio-landing .trio-hospital-options button {
+  padding: 18px 22px;
+}
+.trio-landing .trio-hospital-options strong {
+  font-size: 16px;
+  margin: 7px 0;
+}
+@media (min-width: 1550px) {
+  .network-canvas {
+    height: 415px;
+  }
+}
+@media (max-width: 1000px) {
+  .network-hero {
+    gap: 25px;
+    grid-template-columns: 0.9fr 1.1fr;
+  }
+  .network-canvas {
+    height: 320px;
+  }
+  .network-facilities {
+    padding: 0 12px;
+    gap: 5px;
+  }
+  .network-facilities button {
+    padding: 10px 6px;
+    gap: 5px;
+  }
+  .network-facilities button > svg {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .network-hero {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    padding-bottom: 30px;
+  }
+  .network-hero-copy h1 {
+    font-size: 48px;
+  }
+  .network-hero-copy {
+    padding: 0;
+  }
+  .hero-description {
+    max-width: 540px;
+  }
+  .network-canvas {
+    height: 340px;
+  }
+  .login-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .trio-landing main {
+    margin-top: 35px;
+  }
+  .network-facilities {
+    padding: 0 16px;
+  }
+  .network-facilities button {
+    justify-content: center;
+  }
+}
+@media (max-width: 420px) {
+  .trio-landing {
+    padding: 22px 18px;
+  }
+  .network-hero-copy h1 {
+    font-size: 43px;
+    letter-spacing: -2px;
+  }
+  .network-topline {
+    left: 18px;
+    right: 18px;
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+  .network-canvas {
+    height: 280px;
+  }
+  .network-caption {
+    margin-left: 18px;
+    margin-right: 18px;
+  }
+  .network-caption > span {
+    font-size: 10px;
+  }
+  .network-facilities button {
+    font-size: 10px;
+  }
+}

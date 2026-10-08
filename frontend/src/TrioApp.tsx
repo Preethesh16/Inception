@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -25,6 +27,7 @@ import type { Snapshot, Batch, Negotiation, Message } from "./lib/types";
 import { Button, Badge } from "./components/ui";
 import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
+const HospitalNetwork = lazy(() => import("./components/HospitalNetwork"));
 const EMAILS: Record<string, string> = {
   A: "admin@kaveri.demo",
   B: "admin@chamundi.demo",
@@ -141,16 +144,50 @@ export function TrioLanding() {
         <Badge tone="green">THREE-HOSPITAL DEMO</Badge>
       </header>
       <main>
-        <span className="eyebrow">MEDICAL SUPPLY INTELLIGENCE</span>
-        <h1>
-          One change.
-          <br />A network that responds.
-        </h1>
-        <p className="landing-lead">
-          Upload Kaveri’s hospital file. Adjust stock or report an outbreak.
-          Watch forecasts guide safe transfers between three connected
-          hospitals.
-        </p>
+        <section className="network-hero">
+          <div className="network-hero-copy">
+            <span className="eyebrow">
+              <span className="hero-eyebrow-line" /> MEDICAL SUPPLY INTELLIGENCE
+            </span>
+            <h1>
+              One network.
+              <br />
+              Better prepared.
+            </h1>
+            <p className="landing-lead">
+              The right supplies. The right hospital. Before they’re needed.
+            </p>
+            <p className="hero-description">
+              Turn everyday inventory into shared foresight. Anticipate
+              shortages, connect nearby hospitals, and coordinate transfers with
+              confidence.
+            </p>
+            <a className="hero-login-link" href="#hospital-login">
+              Enter your hospital <ArrowRight size={16} />
+            </a>
+            <div className="hero-capabilities">
+              <span>Forecast demand</span>
+              <span>Share safely</span>
+              <span>Keep care moving</span>
+            </div>
+          </div>
+          <Suspense
+            fallback={
+              <div className="hospital-network network-loading" role="status">
+                Preparing the hospital network…
+              </div>
+            }
+          >
+            <HospitalNetwork selected={selected} onSelect={setSelected} />
+          </Suspense>
+        </section>
+        <div className="login-section-heading" id="hospital-login">
+          <div>
+            <span className="eyebrow">YOUR WORKSPACE</span>
+            <h2>Care starts with connection.</h2>
+          </div>
+          <p>Choose your hospital to get started.</p>
+        </div>
         {logoutNotice && (
           <p role="status" className="notice">
             {logoutNotice}
