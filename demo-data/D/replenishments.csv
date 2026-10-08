@@ -1,0 +1,4 @@
+id,facility_id,supply_id,quantity,arrives_at,confirmed,status,expires_at,storage,unit
+PO-D-ORS,D,ORS,576,2026-10-12T00:00:00+00:00,True,scheduled,2027-01-13T00:00:00+00:00,ambient,sachet
+PO-D-SAL,D,SAL,312,2026-10-12T00:00:00+00:00,True,scheduled,2027-01-13T00:00:00+00:00,ambient,bag
+PO-D-MSK,D,MSK,2640,2026-10-12T00:00:00+00:00,True,scheduled,2027-01-13T00:00:00+00:00,dry,mask

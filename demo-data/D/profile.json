@@ -1,0 +1,14 @@
+{
+  "id": "D",
+  "name": "Mandya Regional Hospital",
+  "area": "Mandya",
+  "lat": 12.522,
+  "lng": 76.897,
+  "patient_load": 210,
+  "emergency_share": 0.12,
+  "lead_days": 7,
+  "storage": [
+    "ambient",
+    "dry"
+  ]
+}

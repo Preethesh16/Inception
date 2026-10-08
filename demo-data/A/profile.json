@@ -1,0 +1,14 @@
+{
+  "id": "A",
+  "name": "Kaveri General Hospital",
+  "area": "Nazarbad",
+  "lat": 12.305,
+  "lng": 76.67,
+  "patient_load": 240,
+  "emergency_share": 0.34,
+  "lead_days": 12,
+  "storage": [
+    "ambient",
+    "dry"
+  ]
+}

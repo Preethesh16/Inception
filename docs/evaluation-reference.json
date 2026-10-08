@@ -1,0 +1,287 @@
+{
+  "scope": "Synthetic unseen seeds only; not clinical validation",
+  "seeds": [
+    2027,
+    2028
+  ],
+  "thresholds_tuned_on_test": false,
+  "elapsed_seconds": 19.17,
+  "results": [
+    {
+      "test_seed": 2027,
+      "model_revision": "29ec3766d36d6f73f0696f85560a422f50e8498c1",
+      "input_hash": "a81c6eb5ee4d02cdcbf09498e3e2484bb4c8c67583e4dd123b1df6eb0106d44b",
+      "selected_model": "chronos-2",
+      "availability_error": null,
+      "validation": [
+        {
+          "model": "seasonal-naive",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 12.214,
+          "wape": 0.1749,
+          "observations": 126
+        },
+        {
+          "model": "recent-level",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 9.926,
+          "wape": 0.1421,
+          "observations": 126
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 6.804,
+          "wape": 0.0974,
+          "observations": 126
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 11.734,
+          "wape": 0.1782,
+          "observations": 504
+        },
+        {
+          "model": "recent-level",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 11.753,
+          "wape": 0.1784,
+          "observations": 504
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 6.163,
+          "wape": 0.0936,
+          "observations": 504
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 7.659,
+          "wape": 0.1183,
+          "observations": 126
+        },
+        {
+          "model": "recent-level",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 7.997,
+          "wape": 0.1236,
+          "observations": 126
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 5.272,
+          "wape": 0.0815,
+          "observations": 126
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 9.567,
+          "wape": 0.1447,
+          "observations": 504
+        },
+        {
+          "model": "recent-level",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 9.866,
+          "wape": 0.1492,
+          "observations": 504
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 7.256,
+          "wape": 0.1097,
+          "observations": 504
+        }
+      ],
+      "raw_test": {
+        "mae": 7.415,
+        "wape": 0.1077,
+        "observations": 504
+      },
+      "incident_adjusted_test": {
+        "mae": 7.377,
+        "wape": 0.1071,
+        "observations": 504
+      },
+      "daily_p10_p90_empirical_coverage": 0.751984126984127,
+      "shortage_alerts": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "mean_warning_lead_days": 10.4144,
+        "mean_stockout_timing_error_days": 0.7555999999999997
+      },
+      "anomaly_detection": {
+        "tp": 22,
+        "fp": 2,
+        "fn": 4,
+        "precision": 0.9166666666666666,
+        "recall": 0.8461538461538461,
+        "detection_delays_days": [
+          2,
+          2,
+          2,
+          2
+        ]
+      }
+    },
+    {
+      "test_seed": 2028,
+      "model_revision": "29ec3766d36d6f73f0696f85560a422f50e8498c1",
+      "input_hash": "9c0b5f922c0c03fcabbe538f635329ec5fcec7102ae7cbf9687e9d53b394d3c5",
+      "selected_model": "chronos-2",
+      "availability_error": null,
+      "validation": [
+        {
+          "model": "seasonal-naive",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 12.341,
+          "wape": 0.177,
+          "observations": 126
+        },
+        {
+          "model": "recent-level",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 10.722,
+          "wape": 0.1538,
+          "observations": 126
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 7,
+          "holdout_offset": 56,
+          "mae": 6.59,
+          "wape": 0.0945,
+          "observations": 126
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 12.24,
+          "wape": 0.186,
+          "observations": 504
+        },
+        {
+          "model": "recent-level",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 12.293,
+          "wape": 0.1868,
+          "observations": 504
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 28,
+          "holdout_offset": 56,
+          "mae": 6.238,
+          "wape": 0.0948,
+          "observations": 504
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 8.778,
+          "wape": 0.1354,
+          "observations": 126
+        },
+        {
+          "model": "recent-level",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 8.483,
+          "wape": 0.1309,
+          "observations": 126
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 7,
+          "holdout_offset": 28,
+          "mae": 5.676,
+          "wape": 0.0876,
+          "observations": 126
+        },
+        {
+          "model": "seasonal-naive",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 10.27,
+          "wape": 0.1547,
+          "observations": 504
+        },
+        {
+          "model": "recent-level",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 10.362,
+          "wape": 0.156,
+          "observations": 504
+        },
+        {
+          "model": "chronos-2",
+          "horizon": 28,
+          "holdout_offset": 28,
+          "mae": 7.74,
+          "wape": 0.1166,
+          "observations": 504
+        }
+      ],
+      "raw_test": {
+        "mae": 6.707,
+        "wape": 0.0984,
+        "observations": 504
+      },
+      "incident_adjusted_test": {
+        "mae": 6.624,
+        "wape": 0.0972,
+        "observations": 504
+      },
+      "daily_p10_p90_empirical_coverage": 0.7936507936507936,
+      "shortage_alerts": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "mean_warning_lead_days": 10.9098,
+        "mean_stockout_timing_error_days": 0.29119999999999957
+      },
+      "anomaly_detection": {
+        "tp": 22,
+        "fp": 2,
+        "fn": 4,
+        "precision": 0.9166666666666666,
+        "recall": 0.8461538461538461,
+        "detection_delays_days": [
+          2,
+          2,
+          2,
+          2
+        ]
+      }
+    }
+  ]
+}

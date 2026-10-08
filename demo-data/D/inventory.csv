@@ -1,0 +1,7 @@
+id,facility_id,supply_id,lot,quantity,expires_at,storage,unit
+D-ORS-01,D,ORS,LOT-D-ORS-01,330,2026-10-12T00:00:00+00:00,ambient,sachet
+D-ORS-02,D,ORS,LOT-D-ORS-02,720,2026-12-19T00:00:00+00:00,ambient,sachet
+D-SAL-01,D,SAL,LOT-D-SAL-01,39,2026-10-12T00:00:00+00:00,ambient,bag
+D-SAL-02,D,SAL,LOT-D-SAL-02,247,2026-12-19T00:00:00+00:00,ambient,bag
+D-MSK-01,D,MSK,LOT-D-MSK-01,330,2026-10-12T00:00:00+00:00,dry,mask
+D-MSK-02,D,MSK,LOT-D-MSK-02,2090,2026-12-19T00:00:00+00:00,dry,mask
