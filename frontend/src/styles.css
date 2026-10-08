@@ -3176,6 +3176,7 @@ pre {
   box-shadow: 0 4px 20px #16372806;
 }
 .workflow-stop-heading {
+  scroll-margin-top: 20px;
   width: 100%;
   border: 0;
   background: transparent;

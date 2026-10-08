@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -1327,7 +1333,7 @@ function Operations({
   ];
 
   function select(next: number, manual = false) {
-    if (manual) setWalking(false);
+    if (manual) setWalking(follow);
     setStage(next);
   }
   useEffect(() => {
@@ -1342,37 +1348,32 @@ function Operations({
       setWalking(true);
     }
   }, [requested, active?.id, network.demo.latest_run, failed, latestJob?.id]);
+  const canAdvance =
+    walking &&
+    follow &&
+    !active &&
+    !requested &&
+    stage < 5 &&
+    complete[stage - 1] &&
+    ready[stage];
   useEffect(() => {
-    if (!walking || !follow || active || requested) return;
-    let next = 0;
-    if (stage === 1 && searchDone) next = 2;
-    if (stage === 2 && offers.length) next = 3;
-    if (stage === 3 && briefed) next = 4;
-    if (stage === 4 && approvalComplete) next = 5;
-    if (!next) return;
-    // Results already exist; these pauses pace their presentation, not computation.
-    const timer = setTimeout(() => setStage(next), 6000);
+    if (!canAdvance) return;
+    // A completed, visible stage gets its own full six-second hold.
+    // Unrelated polling updates must not restart that hold.
+    const timer = setTimeout(() => setStage(stage + 1), 6000);
     return () => clearTimeout(timer);
-  }, [
-    walking,
-    follow,
-    stage,
-    active?.id,
-    requested,
-    searchDone,
-    offers.length,
-    briefed,
-    deliveries.length,
-    approvalComplete,
-  ]);
-  useEffect(() => {
-    if (stage > 1)
-      panels.current[stage - 1]?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
+  }, [stage, canAdvance]);
+  useLayoutEffect(() => {
+    // Expand the new panel first, then position its heading after layout.
+    // Smooth scrolling can land at the old offset as the previous panel collapses.
+    const frame = requestAnimationFrame(() => {
+      const heading = panels.current[
+        stage - 1
+      ]?.querySelector<HTMLButtonElement>(".workflow-stop-heading");
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ behavior: "instant", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [stage]);
   useEffect(() => {
     if (stage > 1 && !ready[stage - 1]) setStage(1);

@@ -110,16 +110,56 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   ).toBe(false);
   const consolePage = await context.newPage();
   await consolePage.goto("http://localhost:5174/?hospital=A");
+  await consolePage.evaluate(() => {
+    let previous = -1;
+    new MutationObserver(() => {
+      const headings = Array.from(
+        document.querySelectorAll(".workflow-stop-heading"),
+      );
+      const stage = headings.findIndex(
+        (el) => el.getAttribute("aria-expanded") === "true",
+      );
+      if (stage !== previous && stage >= 0) {
+        performance.mark("visible-demo-stage-" + stage);
+        previous = stage;
+      }
+    }).observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["aria-expanded"],
+    });
+  });
   await consolePage
     .getByRole("button", { name: "Refresh workflow", exact: true })
     .click();
   await expect(consolePage.locator(".scan-map")).toBeVisible();
+  const assertOpenStage = async (index: number) => {
+    const heading = consolePage.locator(".workflow-stop-heading").nth(index);
+    await expect(heading).toHaveAttribute("aria-expanded", "true");
+    await expect(heading).toBeInViewport();
+    await expect(heading).toBeFocused();
+    await expect(consolePage.locator(".workflow-stop-body")).toHaveCount(1);
+  };
+  await assertOpenStage(1);
   await consolePage.screenshot({
     path: "../artifacts/five-stage-search.png",
     fullPage: true,
   });
   await expect(consolePage.locator(".negotiation-thread")).toBeVisible();
+  await assertOpenStage(2);
   await expect(consolePage.locator(".approval-wait")).toBeVisible();
+  await assertOpenStage(3);
+  const holds = await consolePage.evaluate(() =>
+    [1, 2, 3].map(
+      (stage) =>
+        performance.getEntriesByName("visible-demo-stage-" + stage).at(-1)!
+          .startTime,
+    ),
+  );
+  expect(holds[1] - holds[0]).toBeGreaterThanOrEqual(5900);
+  expect(holds[2] - holds[1]).toBeGreaterThanOrEqual(5900);
+  expect(holds[1] - holds[0]).toBeLessThan(10000);
+  expect(holds[2] - holds[1]).toBeLessThan(10000);
   await expect(
     consolePage
       .locator(".approval-pair")
@@ -181,9 +221,15 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     path: "../artifacts/five-stage-delivery.png",
     fullPage: true,
   });
+  const resetResponse = consolePage.waitForResponse(
+    (response) =>
+      response.url().endsWith("/demo/finish") &&
+      response.request().method() === "POST",
+  );
   await consolePage
     .getByRole("button", { name: "Done — reset demo", exact: true })
     .click();
+  expect((await resetResponse).ok()).toBe(true);
   await waitAnalysis(request, 9);
   const reset = await (await request.get("/api/snapshot", { headers })).json();
   expect(reset.reports).toHaveLength(0);
