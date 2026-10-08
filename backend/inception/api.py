@@ -678,6 +678,17 @@ def onboarding_reset(who=Depends(judge)):
     return {"job": enqueue(store)}
 
 
+@app.post("/demo/finish")
+def finish_demo(who=Depends(judge)):
+    from .trio import seed_trio, import_bundle
+
+    seed_trio(store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+        emit(s, "DEMO_FINISHED", {"restored_facilities": ["A", "B", "D"]})
+    return {"status": "reset", "restored_facilities": ["A", "B", "D"], "job": enqueue(store)}
+
+
 @app.post("/demo/scenarios/{name}", status_code=202)
 def select_scenario(name: str, who=Depends(judge)):
     from .onboarding import start_scenario

@@ -290,3 +290,31 @@ def test_two_reports_logout_clears_all_demo_reports_and_rebuilds_without_a(store
     run_job(store, response.json()["job"])
     assert not in_zone(store.read(), "B", "ORS")
     assert not any(f["facility_id"] == "A" for f in store.read()["forecasts"].values())
+
+
+def test_done_restores_all_three_hospitals_to_original_csv_stock(store, monkeypatch):
+    from inception.trio import import_bundle
+
+    seed_trio(store)
+    monkeypatch.setattr(api, "store", store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+    original = store.read()["batches"]
+    with store.transaction() as s:
+        for b in s["batches"].values():
+            b["quantity"] = 1
+            b["expires_at"] = "2026-10-06T00:00:00Z"
+        s["reports"]["test"] = {"facility_id": "B"}
+        s["negotiations"]["test"] = {"status": "Received"}
+        s["transfers"]["test"] = {"status": "Received"}
+    client = TestClient(api.app)
+    assert client.post("/demo/finish", headers={"X-Demo-Session": "demo-A"}).status_code == 403
+    r = client.post("/demo/finish", headers={"X-Demo-Session": "demo-judge"})
+    assert r.status_code == 200, r.text
+    s = store.read()
+    assert s["batches"] == original
+    assert set(s["settings"]["onboarding"]["hospitals"]) == {"A", "B", "D"}
+    assert not s["reports"] and not s["incidents"] and not s["negotiations"] and not s["transfers"]
+    assert reconciliation(s)["balanced"]
+    run_job(store, r.json()["job"])
+    assert {f["facility_id"] for f in store.read()["forecasts"].values()} == {"A", "B", "D"}

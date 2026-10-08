@@ -181,6 +181,20 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
     path: "../artifacts/five-stage-delivery.png",
     fullPage: true,
   });
+  await consolePage
+    .getByRole("button", { name: "Done — reset demo", exact: true })
+    .click();
+  await waitAnalysis(request, 9);
+  const reset = await (await request.get("/api/snapshot", { headers })).json();
+  expect(reset.reports).toHaveLength(0);
+  expect(reset.transfers).toHaveLength(0);
+  for (const id of ["A", "B", "D"]) {
+    expect(reset.facility_supplies[id]).toHaveLength(3);
+    expect(
+      reset.inventory.some((b: any) => b.facility_id === id && b.quantity > 1),
+    ).toBe(true);
+  }
+  await expect(consolePage.getByLabel("Controlled hospital")).toHaveValue("A");
 });
 test("responsive hospital dashboard and landing have no horizontal overflow", async ({
   page,

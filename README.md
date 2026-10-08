@@ -22,7 +22,7 @@ make dev
 
 The launcher starts FastAPI, the separate CPU worker, and the two Vite frontends. It prefers backend port 8000 but automatically chooses the next available port and configures both frontend proxies. The terminal prints the actual API documentation URL.
 
-The application generates its data and queues its first analysis automatically. `Ctrl+C` shuts down the child processes. Restarting retains the ledger. Use **Reset onboarding demo** in the console for a reproducible fresh start.
+The application generates its data and queues its first analysis automatically. `Ctrl+C` shuts down the child processes. Restarting retains the ledger. Use **Done — reset demo** in the console to restore all three hospitals to their original CSV inventory amounts and expiry dates, clear reports/approvals/transfers, and refresh forecasts. Hospital A logout remains the separate way to return A to an empty CSV-onboarding demo.
 
 Logging out of Hospital A clears its CSV import, inventory, usage history, forecasts, outbreak reports, and active workflow. Its open console becomes empty until the next CSV upload. Hospital B and D logouts preserve their data. A's prior transfer records are archived locally; pending reservations are released, and partner stock stays at its current quantity. This is a demo reset, including for unfinished simulated deliveries, not a production shipment-cancellation workflow.
 

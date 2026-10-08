@@ -1770,8 +1770,34 @@ function Operations({
           </div>
         </>
       )}
+      <section className="trio-card" style={{ marginTop: 24 }}>
+        <h2>Finished your demo?</h2>
+        <p>
+          Reset all inventory changes, outbreak reports, approvals and
+          deliveries. All three hospitals return to their original CSV inventory
+          amounts and expiry dates. Hospital administrators will need to log in
+          again.
+        </p>
+        <Button
+          variant="outline"
+          disabled={busy || !!active}
+          onClick={async () => {
+            if (!(await act("/demo/finish"))) return;
+            setWalking(false);
+            setRequested(false);
+            setStage(1);
+            setFacility("A");
+            setSid("");
+            Object.keys(sessionStorage)
+              .filter((key) => key.startsWith("forecast-checkpoint-"))
+              .forEach((key) => sessionStorage.removeItem(key));
+          }}
+        >
+          Done — reset demo
+        </Button>
+      </section>
       <details className="operations-tools">
-        <summary>Data downloads & demo reset</summary>
+        <summary>Data downloads</summary>
         <div className="file-downloads">
           {[
             "observations",
@@ -1785,21 +1811,6 @@ function Operations({
             </a>
           ))}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy || !!active}
-          onClick={() => {
-            if (
-              confirm(
-                "Reset the synthetic demo? This clears reports, approvals, transfers and logins.",
-              )
-            )
-              act("/demo/onboarding-reset");
-          }}
-        >
-          Reset onboarding demo
-        </Button>
       </details>
     </div>
   );
