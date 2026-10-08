@@ -14,6 +14,15 @@ test("WebGL scene is frameless without animation controls", async ({
       ),
     )
     .toBe(true);
+  await expect(page.locator(".hero-capabilities")).toHaveCount(0);
+  const network = page.locator(".hospital-network");
+  const initial = await network.getAttribute("data-active-hospital");
+  const sequence = ["A", "B", "D"];
+  const start = sequence.indexOf(initial!);
+  for (let step = 1; step <= 3; step++) {
+    await expect(network).toHaveAttribute("data-active-hospital", sequence[(start + step) % 3], { timeout: 3500 });
+  }
+  await expect(page.locator(".trio-hospital-options .selected")).toContainText("Kaveri");
   await page
     .locator(".trio-hospital-options button")
     .filter({ hasText: "Mandya" })

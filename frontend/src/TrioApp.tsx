@@ -164,11 +164,6 @@ export function TrioLanding() {
             <a className="hero-login-link" href="#hospital-login">
               Enter your hospital <ArrowRight size={16} />
             </a>
-            <div className="hero-capabilities">
-              <span>Forecast demand</span>
-              <span>Share safely</span>
-              <span>Keep care moving</span>
-            </div>
           </div>
           <Suspense
             fallback={
@@ -177,7 +172,7 @@ export function TrioLanding() {
               </div>
             }
           >
-            <HospitalNetwork selected={selected} onSelect={setSelected} />
+            <HospitalNetwork />
           </Suspense>
         </section>
         <div className="login-section-heading" id="hospital-login">
