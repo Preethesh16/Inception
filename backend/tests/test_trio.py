@@ -134,3 +134,38 @@ def test_expiry_edit_is_audited_and_idempotent(store, monkeypatch):
     assert store.read()["batches"][b["id"]]["expires_at"].startswith("2026-10-06")
     assert len([m for m in store.read()["movements"].values() if m["id"] == "expiry-change-01"]) == 1
     assert reconciliation(store.read())["balanced"]
+
+
+def test_remove_hospital_import_clears_forecasts_and_preserves_partners(store, monkeypatch):
+    import copy
+    seed_trio(store)
+    monkeypatch.setattr(api, "store", store)
+    client = TestClient(api.app)
+    raw = (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes()
+    result = client.post("/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")})
+    assert result.status_code == 201, result.text
+    run_job(store, enqueue(store))
+    before = store.read()
+    partners = {k: copy.deepcopy(v) for k, v in before["batches"].items() if v["facility_id"] != "A"}
+    # A running job from before the removal must never resurrect A's data.
+    stale = enqueue(store)
+    response = client.delete("/onboarding/A", headers={"X-Demo-Session": "demo-judge"})
+    assert response.status_code == 200, response.text
+    snapshot = client.get("/snapshot", headers={"X-Demo-Session": "demo-A"}).json()
+    assert snapshot["facility_supplies"]["A"] == []
+    for key in ("supplies", "inventory", "forecasts", "risks", "negotiations", "movements", "replenishments"):
+        assert snapshot[key] == [], key
+    assert "A" not in store.read()["settings"]["facility_knowledge"]
+    run_job(store, stale)
+    run_job(store, response.json()["job"])
+    after = store.read()
+    assert not any(f["facility_id"] == "A" for f in after["forecasts"].values())
+    assert set(f["facility_id"] for f in after["forecasts"].values()) == {"B", "D"}
+    assert after["batches"] == partners
+    assert reconciliation(after)["balanced"]
+    assert client.delete("/onboarding/B", headers={"X-Demo-Session": "demo-A"}).status_code == 403
+    # The same CSV can now be uploaded again as a fresh onboarding.
+    result = client.post("/onboarding/csv", headers={"X-Demo-Session": "demo-A"}, files={"file": ("A.csv", raw, "text/csv")})
+    assert result.status_code == 201, result.text
+    run_job(store, result.json()["job"])
+    assert len(client.get("/forecasts", headers={"X-Demo-Session": "demo-A"}).json()) == 3

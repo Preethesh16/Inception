@@ -279,3 +279,28 @@ def seed_trio(store, directory=DATA):
         s["replenishments"] = {k: v for k, v in s["replenishments"].items() if v["facility_id"] != "A"}
         s["settings"]["demo"]["latest_run"] = None
         emit(s, "THREE_HOSPITAL_DEMO_READY", {"onboarding": "A", "nearby": "B", "outside": "D"})
+
+
+def remove_import(state, fid):
+    """Clear one demo import without reseeding other hospitals or their stock."""
+    from .transactions import invalidate
+
+    require(fid in state["facilities"], "Unknown hospital", 404)
+    require(state["settings"]["demo"].get("mode") == "three-hospital", "Requires the onboarding demo")
+    require(
+        not any(fid in (t["donor"], t["recipient"]) for t in state["transfers"].values()),
+        "This hospital has transfer records. Use the full demo reset to avoid erasing transferred stock history.",
+    )
+    for collection in ("batches", "movements", "replenishments", "reports", "forecasts"):
+        state[collection] = {k: v for k, v in state[collection].items() if v["facility_id"] != fid}
+    state["negotiations"] = {
+        k: v for k, v in state["negotiations"].items() if fid not in (v["donor"], v["recipient"])
+    }
+    state["incidents"] = {k: v for k, v in state["incidents"].items() if fid not in v["facilities"]}
+    state["settings"].get("onboarding", {}).get("hospitals", {}).pop(fid, None)
+    state["settings"].get("facility_knowledge", {}).pop(fid, None)
+    # Hide the old network allocation immediately; queued/in-flight runs are
+    # invalidated by the revision change and rebuild from onboarded history only.
+    state["settings"]["demo"]["latest_run"] = None
+    invalidate(state, "Hospital import removed")
+    emit(state, "HOSPITAL_IMPORT_REMOVED", {"facility_id": fid}, [fid])

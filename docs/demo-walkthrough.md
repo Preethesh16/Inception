@@ -95,3 +95,8 @@ The console's **Controlled hospital** selector scopes product charts, evidence, 
 A donor search requires projected unmet demand of at least one supply pack within the 28-day supported horizon. A recipient search requires at least one whole pack of stock projected to expire unused locally, with no projected shortage at the donor. Expiry alone is not a trigger: stock needed locally is kept. An expiry-rescue recipient must consume the incoming stock before expiry without increasing its own waste. The donor's stress-demand protection, shelf-life margin, handling checks and outbreak exclusions still apply. If no recipient qualifies, the system explains why and does not create a proposal.
 
 Expiry-rescue transfers may serve a hospital whose stock is currently adequate: they use that hospital's forecast consumption to prevent waste, and do not claim the recipient has a shortage. Approvals revalidate local surplus and recipient use. No search or negotiation is started when neither trigger is present.
+
+
+## Removing one imported hospital
+
+`DELETE /onboarding/A` with the local judge session removes A’s imported products, batches, consumption history, knowledge record, reports and proposals, then recalculates the remaining network. It preserves the other hospitals’ inventories and login sessions. Hospitals with transfer history require a full demo reset instead, to preserve stock accounting. The product selector is driven by each hospital’s import record: an empty hospital has no products, forecast charts or workflow stages, even after background refresh. Upload the CSV again from Onboarding to restart.

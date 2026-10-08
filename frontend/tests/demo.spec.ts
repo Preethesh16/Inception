@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./fixtures";
 const headers = { "X-Demo-Session": "demo-judge" };
@@ -120,7 +121,9 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await expect(consolePage.locator(".negotiation-thread")).toBeVisible();
   await expect(consolePage.locator(".approval-wait")).toBeVisible();
   await expect(
-    consolePage.getByText("Awaiting approval", { exact: true }),
+    consolePage
+      .locator(".approval-pair")
+      .getByText("Awaiting approval", { exact: true }),
   ).toHaveCount(2);
   await expect(
     consolePage.locator(".workflow-stop-heading").nth(4),
@@ -238,7 +241,7 @@ test("console shows only the controlled hospital and all its products", async ({
   await waitAnalysis(request, 6);
   await page.goto("http://localhost:5174/?hospital=A");
   await expect(
-    page.getByText("Awaiting hospital onboarding", { exact: true }),
+    page.getByText("No hospital data imported", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".forecast-summary")).toHaveCount(0);
   for (const hospital of ["D", "B"]) {
@@ -389,4 +392,48 @@ test("hospital has four tabs, an empty approval inbox, and scoped approval login
     path: "../artifacts/five-stage-hospital.png",
     fullPage: true,
   });
+});
+
+test("removing an imported hospital empties its open console without affecting partners", async ({
+  page,
+  request,
+}) => {
+  await request.post("/api/demo/onboarding-reset", { headers });
+  await waitAnalysis(request, 6);
+  const imported = await request.post("/api/onboarding/csv", {
+    headers: { "X-Demo-Session": "demo-A" },
+    multipart: {
+      file: {
+        name: "A.csv",
+        mimeType: "text/csv",
+        buffer: readFileSync("../demo-data/three-hospital/A-hospital.csv"),
+      },
+    },
+  });
+  expect(imported.ok()).toBe(true);
+  await waitAnalysis(request, 9);
+  await page.goto("http://localhost:5174/?hospital=A");
+  await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
+  await expect(page.locator(".forecast-summary")).toHaveCount(1);
+  expect((await request.delete("/api/onboarding/A", { headers })).ok()).toBe(
+    true,
+  );
+  await expect(
+    page.getByText("No hospital data imported", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Product", { exact: true })).toBeDisabled();
+  await expect(page.locator("select[aria-label=Product] option")).toHaveText([
+    "No products — upload CSV",
+  ]);
+  await expect(page.locator(".forecast-summary")).toHaveCount(0);
+  await expect(page.locator(".workflow-stop")).toHaveCount(0);
+  await waitAnalysis(request, 6);
+  await expect(page.locator(".forecast-summary")).toHaveCount(0);
+  await page.screenshot({
+    path: "../artifacts/empty-hospital-console.png",
+    fullPage: true,
+  });
+  await page.getByLabel("Controlled hospital").selectOption("B");
+  await expect(page.getByLabel("Product", { exact: true })).toBeEnabled();
+  await expect(page.locator(".forecast-summary")).toHaveCount(1);
 });

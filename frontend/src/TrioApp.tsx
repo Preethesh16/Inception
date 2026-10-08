@@ -337,7 +337,11 @@ export default function TrioApp() {
             </h1>
           </div>
           {!consoleMode && (
-            <Button variant="outline" onClick={() => setReport(true)}>
+            <Button
+              variant="outline"
+              disabled={!data?.supplies.length}
+              onClick={() => setReport(true)}
+            >
               <AlertTriangle size={15} />
               Report outbreak
             </Button>
@@ -355,7 +359,11 @@ export default function TrioApp() {
             {!consoleMode && (
               <div className="trio-status">
                 <Badge tone={running ? "amber" : "green"}>
-                  {running ? "Analysis " + running.status : "Connected"}
+                  {!data.supplies.length
+                    ? "Awaiting CSV"
+                    : running
+                      ? "Analysis " + running.status
+                      : "Connected"}
                 </Badge>
                 <span>
                   Scenario date {date(data.demo.as_of)} · refresh every 5
@@ -1152,7 +1160,23 @@ function Operations({
   const [facility, setFacility] = useState(
     new URLSearchParams(location.search).get("hospital") || "A",
   );
+  const products = network.supplies.filter((s) =>
+    (network.facility_supplies?.[facility] || []).includes(s.id),
+  );
   const [sid, setSid] = useState("ORS");
+  useEffect(() => {
+    if (!products.length) {
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith("forecast-checkpoint-" + facility + ":"))
+        .forEach((k) => sessionStorage.removeItem(k));
+    }
+    if (!products.some((s) => s.id === sid)) {
+      setSid(products[0]?.id || "");
+      setStage(1);
+      setWalking(false);
+      setRequested(false);
+    }
+  }, [facility, products.map((s) => s.id).join(","), sid]);
   const [stage, setStage] = useState(1);
   const [follow, setFollow] = useState(true);
   const [walking, setWalking] = useState(false);
@@ -1330,10 +1354,14 @@ function Operations({
           Product
           <select
             aria-label="Product"
+            disabled={!products.length}
             value={sid}
             onChange={(e) => changeSelection("product", e.target.value)}
           >
-            {network.supplies.map((s) => (
+            {!products.length && (
+              <option value="">No products — upload CSV</option>
+            )}
+            {products.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -1352,312 +1380,343 @@ function Operations({
               setRequested(false);
           }}
         >
-          {active || requested ? "Recalculating…" : "Refresh workflow"}
+          {!products.length
+            ? "Awaiting CSV"
+            : active || requested
+              ? "Recalculating…"
+              : "Refresh workflow"}
         </Button>
       </div>
-      <div className="workflow-caption">
-        <p>
-          Edit inventory in the hospital dashboard, then refresh here to follow
-          the result.
-        </p>
-        <label>
-          <input
-            type="checkbox"
-            checked={follow}
-            onChange={(e) => {
-              setFollow(e.target.checked);
-              if (e.target.checked) setWalking(true);
-            }}
-          />{" "}
-          Follow stages automatically
-        </label>
-      </div>
-      {failed && (
-        <p role="alert" className="notice notice-danger">
-          Analysis failed: {latestJob.error}. Refresh to retry.
-        </p>
-      )}
-      <div className="workflow-rail" aria-label="Workflow stages">
-        {titles.map((title, index) => (
-          <section
-            key={index}
-            ref={(el) => {
-              panels.current[index] = el;
-            }}
-            className={
-              "workflow-stop " + (stage === index + 1 ? "is-current" : "")
-            }
+      {!products.length ? (
+        <section className="trio-card empty-hospital" style={{ marginTop: 24 }}>
+          <h2>No hospital data imported</h2>
+          <p>
+            Upload this hospital’s CSV to add its products and consumption
+            history. Forecasts and workflow stages will appear after import.
+          </p>
+          <a
+            href={"http://localhost:5173/hospital/" + facility}
+            target="_blank"
+            rel="noreferrer"
           >
-            <button
-              className="workflow-stop-heading"
-              disabled={!ready[index]}
-              aria-expanded={stage === index + 1}
-              aria-current={stage === index + 1 ? "step" : undefined}
-              onClick={() => select(index + 1, true)}
-            >
-              <span className="stage-number">{index + 1}</span>
-              <strong>{title}</strong>
-              <small>
-                {index === 0 && (active || requested)
-                  ? "Calculating"
-                  : !ready[index]
-                    ? "Waiting"
-                    : complete[index]
-                      ? [
-                          "Calculated",
-                          "Complete",
-                          "Complete",
-                          "Approved",
-                          "Delivered",
-                        ][index]
-                      : index === 3
-                        ? "Awaiting approval"
-                        : "In progress"}
-              </small>
-            </button>
-            {stage === index + 1 && (
-              <div className="workflow-stop-body">
-                {stage === 1 && (
-                  <>
-                    <ForecastSummary
-                      forecast={forecast}
-                      risk={risk}
-                      supply={supply}
-                      updating={!!active || requested}
-                    />
-                    <p className="stage-result">
-                      {active || requested
-                        ? "Running the forecast and checking current batches, expiry and arrivals…"
-                        : gate?.kind === "none"
-                          ? "No transfer needed. This workflow stops here."
-                          : gate?.reason || "Upload the hospital CSV to begin."}
-                    </p>
-                    {searchDone && !active && !requested && (
-                      <Button
-                        onClick={() => {
-                          setWalking(true);
-                          select(2);
-                        }}
-                      >
-                        Continue to hospital search <ArrowRight size={15} />
-                      </Button>
-                    )}
-                  </>
-                )}
-                {stage === 2 && (
-                  <>
-                    <p className="stage-result">
-                      Search complete. Eligibility was calculated from the
-                      connected hospitals’ forecasts, usable stock, expiry and
-                      outbreak restrictions.
-                    </p>
-                    <div className="scan-map">
-                      <NetworkMap
-                        data={{ ...network, negotiations: offers }}
-                        supply={sid}
-                        focus={facility}
-                      />
-                      <div className="scan-map-caption">
-                        Geographic search results ·{" "}
-                        {offers.length ? "safe match found" : "no safe match"}
-                      </div>
-                    </div>
-                    <div className="scan-results">
-                      {network.facilities
-                        .filter((h) => h.id !== facility)
-                        .map((h) => {
-                          const matches = offers.filter(
-                            (n) => n.donor === h.id || n.recipient === h.id,
-                          );
-                          const reasons =
-                            network.allocation?.rejected.filter(
-                              (x) =>
-                                x.facility_id === h.id && x.supply_id === sid,
-                            ) || [];
-                          const inZone = network.incidents.some(
-                            (i) =>
-                              i.supply_id === sid &&
-                              Math.hypot(
-                                (h.lat - i.center.lat) * 111,
-                                (h.lng - i.center.lng) *
-                                  111 *
-                                  Math.cos((h.lat * Math.PI) / 180),
-                              ) <= i.radius_km,
-                          );
-                          return (
-                            <article key={h.id}>
-                              <div>
-                                <strong>{h.name}</strong>
-                                <p>
-                                  {matches.length
-                                    ? matches
-                                        .map(
-                                          (n) =>
-                                            `${fmt(n.quantity)} ${supply?.unit}s available for this transfer · ${n.travel_hours} h simulated travel`,
-                                        )
-                                        .join("; ")
-                                    : reasons.length
-                                      ? [
-                                          ...new Set(
-                                            reasons.map((x) => x.reason),
-                                          ),
-                                        ].join(" · ")
-                                      : inZone
-                                        ? "Inside the operational planning zone; excluded from automatic donation."
-                                        : "No feasible allocation selected for this hospital."}
-                                </p>
-                              </div>
-                              <Badge
-                                tone={matches.length ? "green" : "neutral"}
-                              >
-                                {matches.length ? "Selected" : "Not selected"}
-                              </Badge>
-                            </article>
-                          );
-                        })}
-                    </div>
-                    <p className="microcopy">
-                      The backend selects the nearest feasible hospital using
-                      the demo travel-time matrix. Lines show connections, not
-                      road navigation.
-                    </p>
-                    {offers.length ? (
-                      <Button
-                        onClick={() => {
-                          setWalking(true);
-                          select(3);
-                        }}
-                      >
-                        View negotiation <ArrowRight size={15} />
-                      </Button>
-                    ) : (
-                      <p className="stage-result">
-                        No safe transfer is possible. The unmet requirement
-                        remains open; no approval has been created.
-                      </p>
-                    )}
-                  </>
-                )}
-                {stage === 3 && (
-                  <>
-                    <p className="microcopy">
-                      Messages below are stored outputs from the hospital agents
-                      and constrained allocation engine. Live OpenAI messages
-                      appear when the backend API key is configured; fallback
-                      messages are labelled.
-                    </p>
-                    {threads.map((n) => (
-                      <article key={n.id} className="negotiation-thread">
-                        <h3>
-                          {NAME[n.donor]} → {NAME[n.recipient]}
-                        </h3>
-                        <p>
-                          {fmt(n.quantity)} {supply?.unit}s · safe limit{" "}
-                          {fmt(n.max_quantity)} · version {n.version}
+            Open hospital onboarding ↗
+          </a>
+        </section>
+      ) : (
+        <>
+          <div className="workflow-caption">
+            <p>
+              Edit inventory in the hospital dashboard, then refresh here to
+              follow the result.
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={follow}
+                onChange={(e) => {
+                  setFollow(e.target.checked);
+                  if (e.target.checked) setWalking(true);
+                }}
+              />{" "}
+              Follow stages automatically
+            </label>
+          </div>
+          {failed && (
+            <p role="alert" className="notice notice-danger">
+              Analysis failed: {latestJob.error}. Refresh to retry.
+            </p>
+          )}
+          <div className="workflow-rail" aria-label="Workflow stages">
+            {titles.map((title, index) => (
+              <section
+                key={index}
+                ref={(el) => {
+                  panels.current[index] = el;
+                }}
+                className={
+                  "workflow-stop " + (stage === index + 1 ? "is-current" : "")
+                }
+              >
+                <button
+                  className="workflow-stop-heading"
+                  disabled={!ready[index]}
+                  aria-expanded={stage === index + 1}
+                  aria-current={stage === index + 1 ? "step" : undefined}
+                  onClick={() => select(index + 1, true)}
+                >
+                  <span className="stage-number">{index + 1}</span>
+                  <strong>{title}</strong>
+                  <small>
+                    {index === 0 && (active || requested)
+                      ? "Calculating"
+                      : !ready[index]
+                        ? "Waiting"
+                        : complete[index]
+                          ? [
+                              "Calculated",
+                              "Complete",
+                              "Complete",
+                              "Approved",
+                              "Delivered",
+                            ][index]
+                          : index === 3
+                            ? "Awaiting approval"
+                            : "In progress"}
+                  </small>
+                </button>
+                {stage === index + 1 && (
+                  <div className="workflow-stop-body">
+                    {stage === 1 && (
+                      <>
+                        <ForecastSummary
+                          forecast={forecast}
+                          risk={risk}
+                          supply={supply}
+                          updating={!!active || requested}
+                        />
+                        <p className="stage-result">
+                          {active || requested
+                            ? "Running the forecast and checking current batches, expiry and arrivals…"
+                            : gate?.kind === "none"
+                              ? "No transfer needed. This workflow stops here."
+                              : gate?.reason ||
+                                "Upload the hospital CSV to begin."}
                         </p>
-                        {n.messages.map((m, i) => (
-                          <div
-                            key={i}
-                            className={
-                              "agent-bubble " +
-                              (m.actor === n.donor ? "donor-message" : "")
-                            }
+                        {searchDone && !active && !requested && (
+                          <Button
+                            onClick={() => {
+                              setWalking(true);
+                              select(2);
+                            }}
                           >
-                            <strong>
-                              {NAME[m.actor] || m.actor} · {m.type}
-                            </strong>
-                            <p>{m.text}</p>
-                            <small>
-                              {m.mode || "Deterministic allocation message"} ·{" "}
-                              {new Date(m.at).toLocaleTimeString()}
-                            </small>
+                            Continue to hospital search <ArrowRight size={15} />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {stage === 2 && (
+                      <>
+                        <p className="stage-result">
+                          Search complete. Eligibility was calculated from the
+                          connected hospitals’ forecasts, usable stock, expiry
+                          and outbreak restrictions.
+                        </p>
+                        <div className="scan-map">
+                          <NetworkMap
+                            data={{ ...network, negotiations: offers }}
+                            supply={sid}
+                            focus={facility}
+                          />
+                          <div className="scan-map-caption">
+                            Geographic search results ·{" "}
+                            {offers.length
+                              ? "safe match found"
+                              : "no safe match"}
                           </div>
-                        ))}
-                      </article>
-                    ))}
-                    {!briefed ? (
-                      <p role="status">
-                        Waiting for both hospital agents to finish evaluating
-                        the proposal…
-                      </p>
-                    ) : (
-                      <Button
-                        onClick={() => {
-                          setWalking(true);
-                          select(4);
-                        }}
-                      >
-                        Continue to approvals <ArrowRight size={15} />
-                      </Button>
-                    )}
-                  </>
-                )}
-                {stage === 4 && (
-                  <>
-                    <p>
-                      Both hospital administrators must approve the same terms.
-                      Stock is reserved only after both approvals pass
-                      validation.
-                    </p>
-                    {threads.map((n) => (
-                      <article
-                        className="approval-wait"
-                        key={n.id}
-                        data-proposal-id={n.id}
-                      >
-                        <h3>
-                          {fmt(n.quantity)} {supply?.unit}s · version{" "}
-                          {n.version}
-                        </h3>
-                        <p>{n.reason}</p>
-                        <div className="approval-pair">
-                          {[n.donor, n.recipient].map((id) => (
-                            <div key={id}>
-                              <strong>{NAME[id]}</strong>
-                              <Badge
-                                tone={
-                                  n.approvals.includes(id) ? "green" : "amber"
-                                }
-                              >
-                                {n.approvals.includes(id)
-                                  ? "Approved"
-                                  : "Awaiting approval"}
-                              </Badge>
-                              <a
-                                href={
-                                  "http://localhost:5173/hospital/" +
-                                  id +
-                                  "?tab=approvals"
-                                }
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open hospital dashboard ↗
-                              </a>
-                            </div>
-                          ))}
                         </div>
-                      </article>
-                    ))}
-                    {deliveries.length > 0 && (
-                      <Button onClick={() => select(5)}>
-                        Continue to delivery <ArrowRight size={15} />
-                      </Button>
+                        <div className="scan-results">
+                          {network.facilities
+                            .filter((h) => h.id !== facility)
+                            .map((h) => {
+                              const matches = offers.filter(
+                                (n) => n.donor === h.id || n.recipient === h.id,
+                              );
+                              const reasons =
+                                network.allocation?.rejected.filter(
+                                  (x) =>
+                                    x.facility_id === h.id &&
+                                    x.supply_id === sid,
+                                ) || [];
+                              const inZone = network.incidents.some(
+                                (i) =>
+                                  i.supply_id === sid &&
+                                  Math.hypot(
+                                    (h.lat - i.center.lat) * 111,
+                                    (h.lng - i.center.lng) *
+                                      111 *
+                                      Math.cos((h.lat * Math.PI) / 180),
+                                  ) <= i.radius_km,
+                              );
+                              return (
+                                <article key={h.id}>
+                                  <div>
+                                    <strong>{h.name}</strong>
+                                    <p>
+                                      {matches.length
+                                        ? matches
+                                            .map(
+                                              (n) =>
+                                                `${fmt(n.quantity)} ${supply?.unit}s available for this transfer · ${n.travel_hours} h simulated travel`,
+                                            )
+                                            .join("; ")
+                                        : reasons.length
+                                          ? [
+                                              ...new Set(
+                                                reasons.map((x) => x.reason),
+                                              ),
+                                            ].join(" · ")
+                                          : inZone
+                                            ? "Inside the operational planning zone; excluded from automatic donation."
+                                            : "No feasible allocation selected for this hospital."}
+                                    </p>
+                                  </div>
+                                  <Badge
+                                    tone={matches.length ? "green" : "neutral"}
+                                  >
+                                    {matches.length
+                                      ? "Selected"
+                                      : "Not selected"}
+                                  </Badge>
+                                </article>
+                              );
+                            })}
+                        </div>
+                        <p className="microcopy">
+                          The backend selects the nearest feasible hospital
+                          using the demo travel-time matrix. Lines show
+                          connections, not road navigation.
+                        </p>
+                        {offers.length ? (
+                          <Button
+                            onClick={() => {
+                              setWalking(true);
+                              select(3);
+                            }}
+                          >
+                            View negotiation <ArrowRight size={15} />
+                          </Button>
+                        ) : (
+                          <p className="stage-result">
+                            No safe transfer is possible. The unmet requirement
+                            remains open; no approval has been created.
+                          </p>
+                        )}
+                      </>
                     )}
-                  </>
+                    {stage === 3 && (
+                      <>
+                        <p className="microcopy">
+                          Messages below are stored outputs from the hospital
+                          agents and constrained allocation engine. Live OpenAI
+                          messages appear when the backend API key is
+                          configured; fallback messages are labelled.
+                        </p>
+                        {threads.map((n) => (
+                          <article key={n.id} className="negotiation-thread">
+                            <h3>
+                              {NAME[n.donor]} → {NAME[n.recipient]}
+                            </h3>
+                            <p>
+                              {fmt(n.quantity)} {supply?.unit}s · safe limit{" "}
+                              {fmt(n.max_quantity)} · version {n.version}
+                            </p>
+                            {n.messages.map((m, i) => (
+                              <div
+                                key={i}
+                                className={
+                                  "agent-bubble " +
+                                  (m.actor === n.donor ? "donor-message" : "")
+                                }
+                              >
+                                <strong>
+                                  {NAME[m.actor] || m.actor} · {m.type}
+                                </strong>
+                                <p>{m.text}</p>
+                                <small>
+                                  {m.mode || "Deterministic allocation message"}{" "}
+                                  · {new Date(m.at).toLocaleTimeString()}
+                                </small>
+                              </div>
+                            ))}
+                          </article>
+                        ))}
+                        {!briefed ? (
+                          <p role="status">
+                            Waiting for both hospital agents to finish
+                            evaluating the proposal…
+                          </p>
+                        ) : (
+                          <Button
+                            onClick={() => {
+                              setWalking(true);
+                              select(4);
+                            }}
+                          >
+                            Continue to approvals <ArrowRight size={15} />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {stage === 4 && (
+                      <>
+                        <p>
+                          Both hospital administrators must approve the same
+                          terms. Stock is reserved only after both approvals
+                          pass validation.
+                        </p>
+                        {threads.map((n) => (
+                          <article
+                            className="approval-wait"
+                            key={n.id}
+                            data-proposal-id={n.id}
+                          >
+                            <h3>
+                              {fmt(n.quantity)} {supply?.unit}s · version{" "}
+                              {n.version}
+                            </h3>
+                            <p>{n.reason}</p>
+                            <div className="approval-pair">
+                              {[n.donor, n.recipient].map((id) => (
+                                <div key={id}>
+                                  <strong>{NAME[id]}</strong>
+                                  <Badge
+                                    tone={
+                                      n.approvals.includes(id)
+                                        ? "green"
+                                        : "amber"
+                                    }
+                                  >
+                                    {n.approvals.includes(id)
+                                      ? "Approved"
+                                      : "Awaiting approval"}
+                                  </Badge>
+                                  <a
+                                    href={
+                                      "http://localhost:5173/hospital/" +
+                                      id +
+                                      "?tab=approvals"
+                                    }
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Open hospital dashboard ↗
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                        {deliveries.length > 0 && (
+                          <Button onClick={() => select(5)}>
+                            Continue to delivery <ArrowRight size={15} />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {stage === 5 && (
+                      <CourierSimulation
+                        data={{ ...scoped, transfers: deliveries }}
+                        act={act}
+                        busy={busy}
+                      />
+                    )}
+                  </div>
                 )}
-                {stage === 5 && (
-                  <CourierSimulation
-                    data={{ ...scoped, transfers: deliveries }}
-                    act={act}
-                    busy={busy}
-                  />
-                )}
-              </div>
-            )}
-          </section>
-        ))}
-      </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
       <details className="operations-tools">
         <summary>Data downloads & demo reset</summary>
         <div className="file-downloads">

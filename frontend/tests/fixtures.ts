@@ -9,7 +9,7 @@ export const test = base.extend({
     const isolated = await playwright.request.newContext({ baseURL: target });
     const proxy = new Proxy(isolated, {
       get(obj, prop) {
-        if (prop === "get" || prop === "post")
+        if (prop === "get" || prop === "post" || prop === "delete")
           return (url: string, options: any) =>
             obj[prop](url.replace(/^\/api/, ""), options);
         const value = Reflect.get(obj, prop);

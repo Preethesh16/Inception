@@ -111,6 +111,12 @@ def health():
 def snapshot(who=Depends(actor)):
     s = store.read()
     demo = s["settings"]["demo"]
+    records = s["settings"].get("onboarding", {}).get("hospitals", {})
+    facility_supplies = {
+        fid: sorted({b["supply_id"] for b in records.get(fid, {}).get("batches", [])})
+        if demo.get("mode") == "three-hospital" else sorted(s["supplies"])
+        for fid in s["facilities"]
+    }
     forecasts = scoped(s["forecasts"].values(), who)
     risks = [risk_for(s, f) for f in forecasts]
     rows = negotiations_visible(s, who)
@@ -120,7 +126,8 @@ def snapshot(who=Depends(actor)):
         "demo": demo,
         "actor": who,
         "facilities": list(s["facilities"].values()),
-        "supplies": list(s["supplies"].values()),
+        "facility_supplies": facility_supplies,
+        "supplies": [v for k, v in s["supplies"].items() if who == "judge" or k in facility_supplies.get(who, [])],
         "inventory": scoped(s["batches"].values(), who),
         "risks": risks,
         "forecasts": forecasts,
@@ -637,6 +644,15 @@ async def complete_onboarding(
     with store.transaction() as state:
         result = onboard(state, who, inventory_raw, history_raw)
     return {**result, "job": enqueue(store)}
+
+
+@app.delete("/onboarding/{fid}")
+def remove_hospital_import(fid: str, who=Depends(judge)):
+    from .trio import remove_import
+
+    with store.transaction() as state:
+        remove_import(state, fid)
+    return {"status": "removed", "facility_id": fid, "job": enqueue(store)}
 
 
 @app.post("/demo/onboarding-reset")

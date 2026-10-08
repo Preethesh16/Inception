@@ -158,6 +158,7 @@ export type Report = {
   onset_at: string;
 };
 export type Snapshot = {
+  facility_supplies: Record<string, string[]>;
   actor: string;
   demo: {
     generation: string;
