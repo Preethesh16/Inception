@@ -3,8 +3,20 @@
 import copy
 import math
 from datetime import timedelta
+
 from .config import POLICY
-from .engine import risk_for, batches_for, arrivals_for, donor_safe, in_zone, simulate, dt, travel_hours
+from .engine import (
+    arrivals_for,
+    batches_for,
+    donor_safe,
+    dt,
+    expiry_donor_safe,
+    in_zone,
+    recipient_safe,
+    risk_for,
+    simulate,
+    travel_hours,
+)
 
 
 def search_decisions(state, risks):
@@ -15,24 +27,43 @@ def search_decisions(state, risks):
         unused = sum(
             math.floor(q / pack) * pack for bid, q in r["batch_waste"].items() if bid in state["batches"]
         )
-        expiry = unused >= pack and r["stockout_days"] is None
+        expiry = unused >= pack
+        surplus = (
+            r.get("surplus_candidate_units", 0) >= pack and not shortage and not r.get("risk_review_required")
+        )
+        risk_review = bool(r.get("risk_review_required")) and not shortage
+        recipient_search = expiry or (surplus and not risk_review)
         decisions[key] = {
             "facility_id": r["facility_id"],
             "supply_id": r["supply_id"],
-            "kind": "donor_search" if shortage else "recipient_search" if expiry else "none",
+            "kind": "donor_search"
+            if shortage
+            else "recipient_search"
+            if recipient_search
+            else "risk_review"
+            if risk_review
+            else "none",
+            "recipient_search": recipient_search,
+            "expiry_search": expiry,
+            "risk_review_required": risk_review,
+            "surplus_units": r.get("surplus_candidate_units", 0),
             "shortage_units": round(r["unmet"], 2),
             "unused_expiring_units": unused,
             "reason": "Forecasted unmet demand warrants a donor search."
             if shortage
             else "FEFO projection leaves expiring stock unused locally; look for forecast-supported recipient consumption."
             if expiry
+            else "Inventory exceeds protected demand over the planning horizon; evaluate useful sharing."
+            if surplus
+            else "Central forecast is covered, but empirical shortage risk exceeds policy. Review uncertainty and surge scenarios before deciding additional stock; a simulation frequency alone does not establish a validated purchase quantity."
+            if risk_review
             else "No pack-sized forecast shortage or transferable expiry exposure. No search or negotiation.",
         }
     return decisions
 
 
 def expiry_matches(state, risks, decisions, existing):
-    if not any(d["kind"] == "recipient_search" for d in decisions.values()):
+    if not any(d.get("recipient_search") for d in decisions.values()):
         return [], []
     work = copy.deepcopy(state)
     moves, rejected = [], []
@@ -57,7 +88,7 @@ def expiry_matches(state, risks, decisions, existing):
     for move in existing:
         apply(move)
     for key, decision in decisions.items():
-        if decision["kind"] != "recipient_search":
+        if not decision.get("recipient_search"):
             continue
         donor, sid = decision["facility_id"], decision["supply_id"]
         if in_zone(work, donor, sid):
@@ -76,7 +107,10 @@ def expiry_matches(state, risks, decisions, existing):
             batches = sorted(batches_for(work, donor, sid), key=lambda b: (b["expires_at"], b["id"]))
             found = False
             for batch in batches:
-                if before_donor["batch_waste"].get(batch["id"], 0) < pack:
+                expiry_rescue = before_donor["batch_waste"].get(batch["id"], 0) >= pack
+                if batch["quantity"] - batch.get("reserved", 0) < pack:
+                    continue
+                if not expiry_rescue and before_donor.get("surplus_candidate_units", 0) < pack:
                     continue
                 for recipient in sorted(
                     work["facilities"],
@@ -91,9 +125,9 @@ def expiry_matches(state, risks, decisions, existing):
                     eta = dt(as_of) + timedelta(hours=hours)
                     if dt(batch["expires_at"]) <= eta + timedelta(days=POLICY["residual_life_days"]):
                         continue
-                    if batch["storage"] not in work["facilities"][recipient]["storage"] or not donor_safe(
-                        work, donor, sid, {batch["id"]: pack}
-                    ):
+                    if batch["storage"] not in work["facilities"][recipient]["storage"] or not (
+                        expiry_donor_safe if expiry_rescue else donor_safe
+                    )(work, donor, sid, {batch["id"]: pack}):
                         continue
                     rfc = work["forecasts"][f"{recipient}:{sid}"]
                     before = risk_for(work, rfc)
@@ -122,7 +156,13 @@ def expiry_matches(state, risks, decisions, existing):
                     if (
                         after["consumed"].get(incoming["id"], 0) < pack - 1e-6
                         or after["waste"] > before["expiry_units"] + 1e-6
-                        or after_donor["waste"] > before_donor["expiry_units"] - pack + 1e-6
+                        or (
+                            expiry_rescue
+                            and after_donor["waste"] > before_donor["expiry_units"] - pack + 1e-6
+                        )
+                        or not recipient_safe(work, recipient, sid, [incoming])
+                        # Long-life transfers need demonstrated shortage benefit; do not just relocate surplus.
+                        or (not expiry_rescue and after["unmet"] >= before["unmet"] - 1e-6)
                     ):
                         continue
                     move = {
@@ -138,22 +178,27 @@ def expiry_matches(state, risks, decisions, existing):
                         "before_unmet": before["unmet"],
                         "after": after["stockout_days"],
                         "remaining_unmet": after["unmet"],
-                        "purpose": "expiry_rescue",
-                        "expiry_saved": pack,
-                        "reason": "Expiry rescue: donor forecast leaves this batch unused. Recipient forecast consumes the offered units before expiry without increasing waste. Protected donor demand remains covered.",
+                        "purpose": "expiry_rescue" if expiry_rescue else "surplus_share",
+                        "expiry_saved": pack if expiry_rescue else 0,
+                        "reason": "Expiry rescue: donor forecast leaves this batch unused. Recipient forecast consumes the offered units before expiry without increasing waste. Removing these units does not increase donor unmet demand in any evaluated path."
+                        if expiry_rescue
+                        else "Share surplus within the planning horizon: recipient shortage decreases and donor demand scenarios remain protected.",
                     }
                     match = next(
                         (
                             m
                             for m in moves
-                            if m["donor"] == donor and m["recipient"] == recipient and m["supply_id"] == sid
+                            if m["donor"] == donor
+                            and m["recipient"] == recipient
+                            and m["supply_id"] == sid
+                            and m["purpose"] == move["purpose"]
                         ),
                         None,
                     )
                     apply(move)
                     if match:
                         match["quantity"] += pack
-                        match["expiry_saved"] += pack
+                        match["expiry_saved"] += move["expiry_saved"]
                         line = next((l for l in match["lines"] if l["batch_id"] == batch["id"]), None)
                         if line:
                             line["quantity"] += pack

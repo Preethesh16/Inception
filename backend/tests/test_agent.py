@@ -164,10 +164,10 @@ def test_agent_reserve_arithmetic_matches_enforced_donor_path(state):
     f["stress"] = [10.0] * 28
     f["normal_daily"] = 5.0
     expected = donor_protection(state, f)
-    assert expected["horizon_days"] == 12
-    assert expected["higher_path_units"] == 120
+    assert expected["horizon_days"] == 28
+    assert expected["higher_path_units"] == 280
     assert expected["normal_day_buffer_units"] == 5
-    assert expected["protected_units"] == 125
+    assert expected["protected_units"] == 285
     supplied = next(f for f in context(state, "A")["forecast_evidence"] if f["supply_id"] == "ORS")
     assert supplied["donor_protection"] == expected
 

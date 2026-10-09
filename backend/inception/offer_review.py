@@ -1,8 +1,9 @@
 """Forecast-grounded shelf-life review of shared transfer terms."""
 
 from datetime import timedelta
+
 from .config import POLICY
-from .engine import arrivals_for, batches_for, dt, simulate
+from .engine import arrivals_for, batches_for, dt, recipient_safe, simulate
 
 
 def review_offer(state, proposal, quantity):
@@ -51,6 +52,7 @@ def review_offer(state, proposal, quantity):
         result = simulate(own, forecast["planning"], as_of, arrivals, incoming)
         acceptable = (
             amount == 0
+            and recipient_safe(state, fid, sid, incoming, arrivals)
             and result["waste"] <= before["waste"] + 1e-6
             and all(
                 dt(b["expires_at"]) > eta + timedelta(days=POLICY["residual_life_days"])

@@ -12,8 +12,8 @@ Generator: `backend/inception/seed.py`; seed 2026; start 2026-02-10 UTC.
 | quantity | Observed consumption, nonnegative integer base units |
 | complete | Whether this is a complete observation |
 | stockout_censored | Whether consumption was constrained by available stock |
-| patient_load | Synthetic relevant patient load covariate |
-| emergency_share | Synthetic share of emergency demand |
+| patient_load | Legacy synthetic metadata; optional and excluded from forecasting |
+| emergency_share | Legacy synthetic metadata; optional and excluded from forecasting |
 | report_indicator | Historical report indicator; no future reports are injected |
 
 Demand uses a Poisson process with weekly factors, modest trend and predetermined incident windows. A/B ORS surges begin at indices 100, 180 and 237. F has one isolated mask-consumption spike at 220. C has missing observations; F saline includes stock-out-censored points.

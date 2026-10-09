@@ -581,7 +581,10 @@ export default function App() {
                     <Metric
                       label="Supplies at risk"
                       value={String(
-                        ownRisks.filter((r) => r.before_replenishment).length,
+                        ownRisks.filter(
+                          (r) =>
+                            r.stockout_days !== null || r.risk_review_required,
+                        ).length,
                       ).padStart(2, "0")}
                       note="Before scheduled replenishment"
                       icon={<Activity size={18} />}
@@ -780,7 +783,8 @@ export default function App() {
                                       {r ? days(r.stockout_days) : "Pending"}
                                     </strong>
                                     <small>
-                                      {r?.before_replenishment
+                                      {r?.stockout_days != null ||
+                                      r?.risk_review_required
                                         ? "Before restock"
                                         : "Evaluated over 28 days"}
                                     </small>
@@ -1304,7 +1308,11 @@ export default function App() {
                       value={String(
                         new Set(
                           data.risks
-                            .filter((r) => r.before_replenishment)
+                            .filter(
+                              (r) =>
+                                r.stockout_days !== null ||
+                                r.risk_review_required,
+                            )
                             .map((r) => r.facility_id),
                         ).size,
                       ).padStart(2, "0")}

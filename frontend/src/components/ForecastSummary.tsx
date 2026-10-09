@@ -80,13 +80,23 @@ export function ForecastSummary({
           <h2>{supply?.name || f.supply_id}</h2>
         </div>
         <Badge
-          tone={updating ? "amber" : r.stockout_days !== null ? "red" : "green"}
+          tone={
+            updating
+              ? "amber"
+              : r.stockout_days !== null
+                ? "red"
+                : r.risk_review_required
+                  ? "amber"
+                  : "green"
+          }
         >
           {updating
             ? "Updating…"
             : r.stockout_days !== null
               ? "Shortage projected"
-              : "Stock covers the next 28 days"}
+              : r.risk_review_required
+                ? "Uncertain demand: review stock"
+                : "Central forecast covered for 28 days"}
         </Badge>
       </div>
       <p className="forecast-answer">
@@ -112,6 +122,36 @@ export function ForecastSummary({
           </>
         )}
       </p>
+      {r.uncertainty?.available && (
+        <div className="forecast-uncertainty">
+          <p>
+            <strong>Demand uncertainty:</strong>{" "}
+            {((r.uncertainty.shortage_probability ?? 0) * 100).toFixed(1)}% of
+            simulated paths run short. Average unmet demand:{" "}
+            {fmt(r.uncertainty.expected_unmet)} {unit}s; 95th-percentile unmet
+            demand: {fmt(r.uncertainty.unmet_p95)} {unit}s. Average expiry
+            waste: {fmt(r.uncertainty.expected_waste)} {unit}s.
+          </p>
+          <small>
+            {r.uncertainty.status.replaceAll("_", " ")} ·{" "}
+            {r.uncertainty.independent_windows} non-overlapping historical
+            windows. These are conditional simulation estimates, not guaranteed
+            probabilities.
+          </small>
+          <details>
+            <summary>Possible surge scenarios</summary>
+            {Object.entries(r.surge_stress ?? {}).map(([scale, outcome]) => (
+              <p key={scale}>
+                {scale} planning demand: {fmt(outcome.unmet)} unmet {unit}s over
+                28 days.
+              </p>
+            ))}
+            <small>
+              Stress tests only. No probability of an outbreak is assigned.
+            </small>
+          </details>
+        </div>
+      )}
       <div className="simple-numbers">
         <div>
           <small>Expected use · next 7 days</small>
@@ -171,10 +211,11 @@ export function ForecastSummary({
           <li>
             <strong>Read this hospital’s consumption history.</strong>
             <p>
-              The model uses up to 180 completed days, with weekday patterns,
-              historical patient load and operational indicators. The latest 7
-              recorded days total {fmt(history7)} units; that total is context,
-              not a formula for the prediction.
+              The model uses up to 180 days of consumption history and weekday
+              patterns. Missing or stock-constrained days are marked and
+              estimated from earlier observations. The latest 7 recorded days
+              total {fmt(history7)} units; that total is context, not a formula
+              for the prediction.
             </p>
           </li>
           <li>
@@ -185,8 +226,8 @@ export function ForecastSummary({
               <strong>
                 {fmt(raw7)} {unit}s
               </strong>
-              . The engine compares Chronos with baseline forecasts and displays
-              the model it actually selected.
+              . Chronos remains the forecasting model; simpler forecasts are
+              evaluated as benchmarks. Explicit offline test mode is labelled.
             </p>
             <div className="forecast-equation">
               {f.p50

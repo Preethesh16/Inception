@@ -48,7 +48,7 @@ Without OpenAI credentials the assistant clearly reports **deterministic fallbac
 
 Without a CARTO key, the map uses OpenStreetMap tiles with attribution and normal browser caching, following the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). With a key, CARTO Positron is used. If tiles are unavailable, a labelled geographic schematic retains markers, planning zones and connections. Browser tests block public tiles and verify this fallback.
 
-`INCEPTION_FORECAST=baseline` deliberately disables Chronos for fast development. The normal default, `auto`, loads the pinned `amazon/chronos-2` revision on CPU and validates it against two baselines. A missing model or failed download is labelled rather than disguised. Results may be cached; their original compute time and input hash remain visible. **Run live analysis** explicitly bypasses the cache so judges can observe a fresh inference. Report-only updates reuse unchanged raw forecasts and recalculate the planning adjustment.
+`INCEPTION_FORECAST=baseline` deliberately disables Chronos for fast development. The default, `chronos`, loads the verified pinned `amazon/chronos-2` revision on CPU. Baselines are benchmarks only. Model-loading or inference failure fails the analysis job rather than silently switching models. `auto` remains an alias for Chronos-only operation. Results may be cached; their original compute time and input hash remain visible. **Run live analysis** explicitly bypasses the cache so judges can observe a fresh inference. Report-only updates reuse unchanged raw forecasts and recalculate the planning adjustment.
 
 ## Demonstrate the current three-hospital journey
 
@@ -61,9 +61,11 @@ Change quantities and expiry dates in **Inventory management**, report affected 
 ### Forecasting and evidence
 
 - Real Chronos-2 CPU inference for 9 onboarded facility–supply series in the three-hospital demo (18 in the original evaluation network): context 180, horizon 28, batch 8, daily P10/P50/P90.
-- Historical patient-load, emergency-share and report covariates; known-future weekday covariates only.
+- Inventory consumption and weekday only; clinical profile fields are not forecast inputs and are optional in legacy CSVs.
 - Causal seasonal imputation of missing or stock-out-censored observations.
-- Seasonal-naive and recent-level baseline comparison at two historical cutoffs and two horizons; lowest mean validation MAE selects the operational model.
+- Weekly rolling historical origins, with 7/28-day MAE, WAPE, quantile loss, empirical interval coverage and width. The latest 28-day block is evaluated using only error paths completed before that block. Chronos remains the operational model.
+- Horizon-specific empirical interval widening and reproducible whole-path residual bootstrap (1,000 draws). Missing/censored test paths are excluded. Overlapping origins are labelled and non-overlapping window counts are shown; simulated probabilities are not validated guarantees.
+- Forecast-error CUSUM supplements median/MAD detection. Explicit 1.5x/2x stress paths have no assigned outbreak probability.
 - A seven-day surge planning floor, separately plotted from the raw forecast. Overlapping reported requirements and observed surges are not added twice.
 - Robust median/MAD anomaly detection, persistence checks, nearby-facility corroboration, scoped incident reports with correction/withdrawal APIs and 72-scenario-hour expiry.
 - Fixed-seed synthetic generator; historical ledger export is separately reconciled from the live demo opening snapshot. The artificial stock reset between these two datasets is explicit.
@@ -71,9 +73,12 @@ Change quantities and expiry dates in **Inventory management**, report affected 
 ### Inventory and redistribution
 
 - Fractional-day FEFO simulation handles expiry, confirmed arrivals, reservations and incoming transfers.
-- Whole-pack allocation by urgency tier, coverage, emergency demand and relevant patient load.
-- Donor protection over the larger of seven days or lead time plus two, with a normal-day reserve. Protection is bounded by the 28-day forecast.
-- Automatic donors are outside the active planning zone and have no projected shortage within the evaluated horizon; the latter is a conservative extra safeguard against circular borrowing.
+- Whole-pack allocation by urgency tier, coverage and unmet inventory demand; no patient-load ranking.
+- Donor protection over a fixed 28-day inventory horizon plus a normal-day unit reserve, independent of supplier lead time. Additional empirical limits default to 5% shortage frequency and half a pack of expected unmet demand; these are configurable engineering policy choices, not clinically validated thresholds.
+- Explicit long-life surplus search and expiry-rescue search. Surplus is a candidate amount, not permission to transfer. Expiry rescue may coexist with a later shortage only when every evaluated path would otherwise waste the offered units and donor unmet demand never increases.
+- Recipient expected expiry waste must not increase across the empirical paths; existing FEFO consumption, pack and dual-approval checks remain enforced.
+- Automatic donors are outside the active planning zone and have no projected shortage within the evaluated horizon; the latter is a conservative extra safeguard against circular borrowing, with the strict no-harm expiry-rescue exception described above.
+- A `risk_review` decision flags empirical shortage exposure when the central forecast is covered. It does not convert unvalidated simulation frequencies into an automatic purchase quantity.
 - Recipient batch-consumption checks, unit and storage matching, quarantine exclusions, and a two-day residual-life requirement.
 - Each proposal shows the effect of **that proposal alone**, not the sum of unrelated unapproved recommendations.
 - Symmetric simulated travel times derived from straight-line distance, a road factor and handling time. Dashed map lines are transfer connections, not navigation routes.

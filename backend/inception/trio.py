@@ -3,12 +3,13 @@
 import csv
 import io
 from datetime import timedelta
-from .seed import seed
-from .config import ROOT, DATA
-from .store import emit
+
+from .config import DATA, ROOT
 from .engine import dt
-from .transactions import require
 from .onboarding import onboard, rows
+from .seed import seed
+from .store import emit
+from .transactions import require
 
 IDS = ("A", "B", "D")
 EMAILS = {"A": "admin@kaveri.demo", "B": "admin@chamundi.demo", "D": "admin@mandya.demo"}
@@ -116,18 +117,13 @@ def import_bundle(state, fid, raw):
             "area": p["area"].strip(),
             "lat": float(p["lat"]),
             "lng": float(p["lng"]),
-            "patient_load": int(p["patient_load"]),
-            "emergency_share": float(p["emergency_share"]),
-            "lead_days": int(p["lead_days"]),
+            "patient_load": 0,
+            "emergency_share": 0.0,
+            "lead_days": 28,
             "storage": ["ambient", "dry"],
         }
         require(
-            bool(profile["name"])
-            and -90 <= profile["lat"] <= 90
-            and -180 <= profile["lng"] <= 180
-            and profile["patient_load"] > 0
-            and 0 <= profile["emergency_share"] <= 1
-            and 1 <= profile["lead_days"] <= 28,
+            bool(profile["name"]) and -90 <= profile["lat"] <= 90 and -180 <= profile["lng"] <= 180,
             "Invalid facility profile",
             422,
         )
@@ -183,10 +179,11 @@ def import_bundle(state, fid, raw):
                 }
                 | {"quantity": quantity, "confirmed": r["confirmed"] == "1", "status": "scheduled"}
             )
-        require(bool(arrivals), "Provide scheduled replenishment records", 422)
         history = [
             {
-                k: r[k]
+                k: r.get(k, "1" if k == "complete" else "0")
+                if k in ("complete", "stockout_censored", "report_indicator")
+                else r[k]
                 for k in (
                     "facility_id",
                     "supply_id",
@@ -194,8 +191,6 @@ def import_bundle(state, fid, raw):
                     "quantity",
                     "complete",
                     "stockout_censored",
-                    "patient_load",
-                    "emergency_share",
                     "report_indicator",
                 )
             }
@@ -290,6 +285,7 @@ def remove_import(state, fid, *, logout_reset=False):
     )
     if logout_reset:
         import copy
+
         from .store import now
         from .transactions import movement
 

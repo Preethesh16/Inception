@@ -2,10 +2,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
 from .config import DATA, POLICY
 from .engine import dt
+from .uncertainty import calibrated_quantiles, path_distribution, quantile_metrics, spike_monitor
 
 _PIPELINE = None
 
@@ -24,11 +27,25 @@ def history_at(as_of, directory=DATA, state=None):
             frame = frame[~((frame.facility_id == fid) & (frame.date <= cutoff))]
             frame = pd.concat([frame, imported], ignore_index=True)
     # Date rows represent completed calendar days, never a partially observed future day.
-    return frame[frame.date < pd.Timestamp(as_of).tz_localize(None)].copy()
+    return frame[frame.date < pd.Timestamp(as_of).tz_localize(None).normalize()].copy()
 
 
-def prepare(group):
+def prepare(group, end_date=None):
     g = group.sort_values("date").copy()
+    if g.date.duplicated().any():
+        raise ValueError("Duplicate daily consumption observations")
+    if not np.isfinite(g.quantity.astype(float)).all() or (g.quantity < 0).any():
+        raise ValueError("Consumption must be finite and nonnegative")
+    # Missing dates are unknown observations, never zero demand. Preserve calendar spacing.
+    fid, sid = g.iloc[0].facility_id, g.iloc[0].supply_id
+    last_day = pd.Timestamp(end_date) if end_date is not None else g.date.max()
+    g = g.set_index("date").reindex(pd.date_range(g.date.min(), last_day, freq="D"))
+    g.index.name = "date"
+    g = g.reset_index()
+    g["facility_id"], g["supply_id"] = fid, sid
+    g["complete"] = g.complete.fillna(0)
+    g["stockout_censored"] = g.stockout_censored.fillna(0)
+    g["quantity"] = g.quantity.fillna(0)
     values, imputed = [], []
     for _, row in g.iterrows():
         if int(row.complete) and not int(row.stockout_censored):
@@ -36,7 +53,7 @@ def prepare(group):
             imputed.append(False)
         else:
             seasonal = values[-7::-7][:8]
-            value = float(np.median(seasonal or values[-7:] or [0]))
+            value = max(float(row.quantity), float(np.median(seasonal or values[-7:] or [0])))
             imputed.append(True)
         values.append(value)
     g["target"] = values
@@ -66,7 +83,7 @@ def chronos(groups, horizon=28, on_status=lambda *x: None):
         _PIPELINE = Chronos2Pipeline.from_pretrained(
             os.getenv("CHRONOS_MODEL", "amazon/chronos-2"),
             device_map="cpu",
-            revision=os.getenv("CHRONOS_REVISION", "29ec3766d36d6f73f0696f85560a422f50e8498c1"),
+            revision=os.getenv("CHRONOS_REVISION", "29ec3766d36d6f73f0696f85560a422f50e8498c"),
         )
     on_status("MODEL_RUNNING", {"model": "amazon/chronos-2", "series": len(groups)})
     frame = pd.concat([g.tail(180) for g in groups.values()])
@@ -74,9 +91,6 @@ def chronos(groups, horizon=28, on_status=lambda *x: None):
         "item_id",
         "date",
         "target",
-        "patient_load",
-        "emergency_share",
-        "report_indicator",
         "day_of_week",
     ]
     future = []
@@ -117,98 +131,123 @@ def metrics(actual, pred):
 
 
 def build_forecasts(history, state, run_id, on_status=lambda *x: None, directory=DATA, force=False):
-    groups = {f"{fid}:{sid}": prepare(g) for (fid, sid), g in history.groupby(["facility_id", "supply_id"])}
+    cutoff = pd.Timestamp(state["settings"]["demo"]["as_of"]).tz_localize(None).normalize()
+    history = history[history.date < cutoff].copy()
+    groups = {
+        f"{fid}:{sid}": prepare(g, cutoff - pd.Timedelta(days=1))
+        for (fid, sid), g in history.groupby(["facility_id", "supply_id"])
+    }
     config = {
         "model": os.getenv("CHRONOS_MODEL", "amazon/chronos-2"),
-        "revision": os.getenv("CHRONOS_REVISION", "29ec3766d36d6f73f0696f85560a422f50e8498c1"),
+        "revision": os.getenv("CHRONOS_REVISION", "29ec3766d36d6f73f0696f85560a422f50e8498c"),
         "context": 180,
         "horizon": 28,
         "quantiles": [0.1, 0.5, 0.9],
-        "policy": POLICY["version"],
-        "mode": os.getenv("INCEPTION_FORECAST", "auto"),
+        "policy": POLICY,
+        "schema": 2,
+        "cutoff": cutoff.isoformat(),
+        "mode": os.getenv("INCEPTION_FORECAST", "chronos"),
     }
+    # Clinical metadata does not influence either prediction or cache identity.
+    inventory_columns = ["facility_id", "supply_id", "date", "quantity", "complete", "stockout_censored"]
     fingerprint = hashlib.sha256(
-        (history.to_csv(index=False) + json.dumps(config, sort_keys=True)).encode()
+        (
+            history[inventory_columns].sort_values(["facility_id", "supply_id", "date"]).to_csv(index=False)
+            + json.dumps(config, sort_keys=True)
+        ).encode()
     ).hexdigest()
     cache_dir = Path(directory) / "forecast_cache"
     cache_dir.mkdir(exist_ok=True)
     cache_path = cache_dir / f"{fingerprint}.json"
-    source, error = "live", None
-    if (
-        not force
-        and cache_path.exists()
-        and (not json.loads(cache_path.read_text())["error"] or config["mode"] == "baseline")
-    ):
+    source = "live"
+    if not force and cache_path.exists():
         payload = json.loads(cache_path.read_text())
         source = "cached"
         on_status("FORECAST_CACHE_HIT", {"input_hash": fingerprint, "computed_at": payload["computed_at"]})
     else:
-        candidates = {"seasonal-naive": {}, "recent-level": {}}
-        for name in candidates:
-            for key, g in groups.items():
-                p = baseline(g, 28, name)
-                residuals = g.target.diff(7).dropna().abs()
-                spread = float(residuals.quantile(0.8)) if len(residuals) else 0
-                candidates[name][key] = {
-                    "p10": np.maximum(0, p - spread).tolist(),
-                    "p50": p.tolist(),
-                    "p90": (p + spread).tolist(),
+        # Baseline mode is an explicit offline/test choice; never silently substitute it.
+        selected = "recent-level" if config["mode"] == "baseline" else "chronos-2"
+
+        def predict(training):
+            if selected == "chronos-2":
+                return chronos(training, on_status=on_status)
+            result = {}
+            for key, g in training.items():
+                center = baseline(g, 28, selected)
+                spread = float(g.target.diff(7).dropna().abs().quantile(0.8)) if len(g) > 7 else 0.0
+                result[key] = {
+                    "p10": np.maximum(0, center - spread).tolist(),
+                    "p50": center.tolist(),
+                    "p90": (center + spread).tolist(),
                 }
-        if config["mode"] != "baseline":
-            try:
-                candidates["chronos-2"] = chronos(groups, on_status=on_status)
-            except Exception as exc:
-                error = f"{type(exc).__name__}: {str(exc)[:300]}"
-                on_status("MODEL_FALLBACK", {"reason": error, "fallback": "validated baseline"})
-        else:
-            error = "Baseline-only mode explicitly configured"
+            return result
+
+        raw_predictions = predict(groups)
+        records = {key: [] for key in groups}
+        monitors = {}
         evaluation = []
-        # Historical cutoffs only: validation does not touch hidden future targets.
-        for holdout in (56, 28):
-            training = {k: g.iloc[:-holdout].copy() for k, g in groups.items() if len(g) > holdout + 28}
+        # Ascending calendar origins; only earlier, fully observed paths calibrate a test.
+        # Latest 28 days are untouched by calibration until after their evaluation.
+        for holdout in range(168, 27, -7):
+            training = {k: g.iloc[:-holdout].copy() for k, g in groups.items() if len(g) >= holdout + 56}
             if not training:
                 continue
-            predictions = {
-                name: {k: baseline(g, 28, name).tolist() for k, g in training.items()}
-                for name in ("seasonal-naive", "recent-level")
-            }
-            if "chronos-2" in candidates:
-                try:
-                    cp = chronos(training, on_status=on_status)
-                    predictions["chronos-2"] = {k: p["p50"] for k, p in cp.items()}
-                except Exception as exc:
-                    on_status("VALIDATION_FAILED", {"reason": str(exc)[:200]})
-            for horizon in (7, 28):
-                for name, preds in predictions.items():
-                    actual, predicted = [], []
-                    for k in training:
-                        test = groups[k].iloc[len(training[k]) : len(training[k]) + horizon]
-                        for j, (_, row) in enumerate(test.iterrows()):
-                            if row.complete and not row.stockout_censored:
-                                actual.append(float(row.quantity))
-                                predicted.append(preds[k][j])
-                    if actual:
-                        evaluation.append(
-                            {
-                                "model": name,
-                                "horizon": horizon,
-                                "holdout_offset": holdout,
-                                **metrics(actual, predicted),
-                            }
-                        )
-        scores = {
-            name: np.mean([r["mae"] for r in evaluation if r["model"] == name])
-            for name in candidates
-            if any(r["model"] == name for r in evaluation)
-        }
-        selected = min(scores, key=scores.get) if scores else "recent-level"
+            predictions = predict(training)
+            for key, train in training.items():
+                test = groups[key].iloc[len(train) : len(train) + 28]
+                valid_mask = ((test.complete == 1) & (test.stockout_censored == 0)).to_numpy()
+                actual = test.quantity.to_numpy(dtype=float)
+                pred = predictions[key]
+                prior = [r for r in records[key] if r["end"] < test.date.iloc[0].isoformat()]
+                adjusted = calibrated_quantiles(pred, prior)
+                for horizon in (7, 28):
+                    mask = valid_mask[:horizon]
+                    if not mask.any():
+                        continue
+                    y = actual[:horizon][mask]
+                    for name in dict.fromkeys((selected, "seasonal-naive", "recent-level")):
+                        values = pred["p50"] if name == selected else baseline(train, 28, name)
+                        row = {
+                            "series": key,
+                            "model": name,
+                            "horizon": horizon,
+                            "holdout_offset": holdout,
+                            "origin": test.date.iloc[0].isoformat(),
+                            "split": "test" if holdout == 28 else "rolling_validation",
+                            **metrics(y, np.asarray(values)[:horizon][mask]),
+                        }
+                        if name == selected:
+                            row.update(
+                                quantile_metrics(
+                                    y, {q: np.asarray(v)[:horizon][mask] for q, v in adjusted.items()}
+                                )
+                            )
+                            row["calibration_origins"] = len(prior)
+                        evaluation.append(row)
+                residual = actual - np.asarray(pred["p50"])
+                if holdout == 28:
+                    reference = [v for r in prior for v in r["residual"]]
+                    monitors[key] = spike_monitor(
+                        [float(v) if ok else None for v, ok in zip(residual[-7:], valid_mask[-7:])], reference
+                    )
+                # Censored/missing outcomes cannot establish a complete error path.
+                if valid_mask.all():
+                    records[key].append(
+                        {
+                            "start": test.date.iloc[0].isoformat(),
+                            "end": test.date.iloc[-1].isoformat(),
+                            "residual": residual.tolist(),
+                        }
+                    )
         from .store import now
 
         payload = {
-            "candidates": candidates,
+            "predictions": raw_predictions,
+            "residual_records": records,
+            "monitors": monitors,
             "evaluation": evaluation,
             "selected": selected,
-            "error": error,
+            "error": "Explicit offline baseline mode" if selected != "chronos-2" else None,
             "computed_at": now(),
             "input_hash": fingerprint,
             "config": config,
@@ -220,13 +259,16 @@ def build_forecasts(history, state, run_id, on_status=lambda *x: None, directory
     for key, g in groups.items():
         fid, sid = key.split(":")
         valid = int(((g.complete == 1) & (g.stockout_censored == 0)).sum())
-        selected = payload["selected"] if valid >= 28 else "recent-level"
-        raw = payload["candidates"][selected][key]
+        selected = payload["selected"]
+        records = payload["residual_records"].get(key, [])
+        raw = calibrated_quantiles(payload["predictions"][key], records)
+        monitor = payload["monitors"].get(key, {"alert": False, "status": "insufficient_error_history"})
         plan, stress, reasons = list(raw["p50"]), list(raw["p90"]), []
         anomaly = any(
             any(e["facility_id"] == fid and e["supply_id"] == sid for e in i["evidence"])
             for i in state["incidents"].values()
         )
+        anomaly = anomaly or monitor["alert"]
         floor = (
             float(g[(g.complete == 1) & (g.stockout_censored == 0)].quantity.tail(3).mean()) if anomaly else 0
         )
@@ -250,6 +292,9 @@ def build_forecasts(history, state, run_id, on_status=lambda *x: None, directory
             reasons.append(
                 f"Reported additional requirement: {additional * 7:.0f} units / 7 days; overlapping surge not added twice"
             )
+        scenarios = path_distribution(plan, records, fingerprint + key)
+        if anomaly or additional:
+            scenarios["status"] = "regime_change_stress_only" if scenarios["paths"] else "unavailable"
         forecasts[key] = {
             "id": key,
             "facility_id": fid,
@@ -267,7 +312,11 @@ def build_forecasts(history, state, run_id, on_status=lambda *x: None, directory
             "stress": stress,
             "normal_daily": normal,
             "adjustments": reasons,
-            "limited_evidence": valid < 28,
+            "scenarios": scenarios,
+            "spike_monitor": monitor,
+            "limited_evidence": valid < 28 or scenarios["status"] != "empirical",
+            "uncertainty_note": "Empirical residual simulation; limited independent history. Daily p90 values are not a joint 90% demand path.",
+            "surge_scenarios": {"1.5x": [v * 1.5 for v in plan], "2x": [v * 2 for v in plan]},
             "imputed_count": int(g.imputed.sum()),
             "fallback_reason": error,
             "history": [
@@ -280,4 +329,4 @@ def build_forecasts(history, state, run_id, on_status=lambda *x: None, directory
                 for _, r in g.tail(30).iterrows()
             ],
         }
-    return forecasts, {k: v for k, v in payload.items() if k != "candidates"}
+    return forecasts, {k: v for k, v in payload.items() if k not in ("predictions", "residual_records")}

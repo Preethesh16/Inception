@@ -1,9 +1,20 @@
 import copy
 import uuid
-from datetime import timedelta, datetime, timezone
-from .store import now, emit
+from datetime import UTC, datetime, timedelta
+
 from .config import POLICY
-from .engine import donor_safe, usable, dt, batches_for, arrivals_for, simulate, in_zone
+from .engine import (
+    arrivals_for,
+    batches_for,
+    donor_safe,
+    dt,
+    expiry_donor_safe,
+    in_zone,
+    recipient_safe,
+    simulate,
+    usable,
+)
+from .store import emit, now
 
 
 class DomainError(Exception):
@@ -204,7 +215,9 @@ def verify(state, n, reserved=False):
             }
         )
     require(
-        donor_safe(working, n["donor"], n["supply_id"], removals),
+        (expiry_donor_safe if n.get("purpose") == "expiry_rescue" else donor_safe)(
+            working, n["donor"], n["supply_id"], removals
+        ),
         "Transfer would compromise protected donor coverage",
     )
     fc = working["forecasts"][f"{n['recipient']}:{n['supply_id']}"]
@@ -237,6 +250,10 @@ def verify(state, n, reserved=False):
         all(result["consumed"].get(a["id"], 0) >= a["quantity"] - 1e-6 for a in incoming),
         "Recipient cannot consume the offered batch before expiry",
     )
+    require(
+        recipient_safe(working, n["recipient"], n["supply_id"], incoming, arrivals),
+        "Transfer would increase expected recipient expiry waste",
+    )
     return eta.isoformat()
 
 
@@ -249,7 +266,7 @@ def approve(state, id, actor, version):
         return n
     require(n["status"] == "Awaiting approvals", "Proposal needs fresh evaluation or is closed")
     require(
-        datetime.now(timezone.utc) - dt(n["created_at"]) < timedelta(hours=24),
+        datetime.now(UTC) - dt(n["created_at"]) < timedelta(hours=24),
         "Proposal expired; request fresh analysis",
     )
     verify(state, n)
@@ -400,7 +417,7 @@ def transfer_action(state, id, action, actor):
 
 def expire_pending(state):
     """Expire uncommitted offers and release abandoned reservations without moving stock."""
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     for n in state["negotiations"].values():
         if n["status"] in ("Awaiting approvals", "Negotiating") and current_time - dt(
             n["created_at"]

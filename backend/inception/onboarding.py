@@ -3,10 +3,11 @@
 import copy
 import csv
 from datetime import timedelta
-from .store import now, emit
-from .engine import dt
-from .transactions import require, movement, invalidate
+
 from .config import ROOT
+from .engine import dt
+from .store import emit, now
+from .transactions import invalidate, movement, require
 
 SCENARIOS = [
     {
@@ -91,14 +92,14 @@ def onboard(state, who, inventory_raw, history_raw):
             key = (row["supply_id"], row["date"])
             assert key not in seen, "Duplicate daily observation"
             seen.add(key)
-            for k in ("quantity", "patient_load", "complete", "stockout_censored", "report_indicator"):
-                row[k] = int(row[k])
+            for k in ("quantity", "complete", "stockout_censored", "report_indicator"):
+                row[k] = int(row[k]) if k == "quantity" else int(row.get(k) or (1 if k == "complete" else 0))
                 assert row[k] >= 0, f"Negative {k}"
             assert all(row[k] in (0, 1) for k in ("complete", "stockout_censored", "report_indicator")), (
                 "Flags must be 0 or 1"
             )
-            row["emergency_share"] = float(row["emergency_share"])
-            assert 0 <= row["emergency_share"] <= 1, "Invalid emergency share"
+            row.pop("patient_load", None)
+            row.pop("emergency_share", None)
             observations.append(row)
         except (KeyError, ValueError, AssertionError, TypeError) as exc:
             errors.append(f"Consumption row {i}: {str(exc) or 'Invalid data'}")
@@ -169,8 +170,8 @@ def import_file(facility, kind):
 
 
 def start_scenario(store, name):
-    from .seed import seed
     from .demo import advance
+    from .seed import seed
 
     require(name in {s["id"] for s in SCENARIOS}, "Unknown scenario", 422)
     previous = store.read()

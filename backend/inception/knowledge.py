@@ -43,8 +43,7 @@ def facility_document(state, fid):
     }
     text = (
         "---\n" + yaml.safe_dump(metadata, sort_keys=False) + "---\n"
-        f"# {profile['name']}\nArea: {profile['area']}. Patient load: {profile['patient_load']}. "
-        f"Supplier lead time: {profile['lead_days']} days.\n"
+        f"# {profile['name']}\nArea: {profile['area']}. Inventory-only demand planning.\n"
         f"Imported {record['history_rows']} consumption observations and {len(record['batches'])} batches.\n"
         "This profile is an import snapshot, not a current inventory balance. Read live batches, "
         "reservations, arrivals and forecasts from the scoped inventory tool.\n"

@@ -129,6 +129,7 @@ test("single CSV, live stock edits, outbreak rerouting, dual approval and receip
   await consolePage
     .getByRole("button", { name: "Refresh workflow", exact: true })
     .click();
+  await waitAnalysis(request);
   await expect(consolePage.locator(".scan-map")).toBeVisible();
   const assertOpenStage = async (index: number) => {
     const heading = consolePage.locator(".workflow-stop-heading").nth(index);
@@ -337,7 +338,7 @@ test("console shows only the controlled hospital and all its products", async ({
   }
 });
 
-test("refresh explains demand separately from stock and advances only for actionable products", async ({
+test("refresh separates demand from stock and respects shortage and surplus searches", async ({
   page,
   request,
 }) => {
@@ -346,9 +347,14 @@ test("refresh explains demand separately from stock and advances only for action
   await page.goto("http://localhost:5174/?hospital=D");
   await expect(page.locator(".forecast-summary")).toBeVisible();
   const safe = snapshot.supplies.find(
-    (s: any) => snapshot.allocation.searches["D:" + s.id].kind === "none",
+    (s: any) =>
+      snapshot.risks.find(
+        (r: any) => r.facility_id === "D" && r.supply_id === s.id,
+      )?.stockout_days === null,
   );
   expect(safe).toBeTruthy();
+  const searchesSurplus =
+    snapshot.allocation.searches["D:" + safe.id].kind === "recipient_search";
   await page.getByLabel("Product", { exact: true }).selectOption(safe.id);
   const refresh = page.waitForRequest(
     (r) => r.url().endsWith("/api/analysis-runs") && r.method() === "POST",
@@ -359,11 +365,14 @@ test("refresh explains demand separately from stock and advances only for action
   expect((await refresh).postDataJSON()).toEqual({ force: true });
   await waitAnalysis(request, 6);
   await expect(page.locator(".forecast-change")).toBeVisible();
-  await expect(page.locator(".workflow-stop-heading").nth(0)).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
-  await expect(page.locator(".workflow-stop-heading").nth(1)).toBeDisabled();
+  await expect(
+    page.locator(".workflow-stop-heading").nth(searchesSurplus ? 1 : 0),
+  ).toHaveAttribute("aria-current", "step");
+  if (searchesSurplus) {
+    await expect(page.locator(".workflow-stop-heading").nth(1)).toBeEnabled();
+  } else {
+    await expect(page.locator(".workflow-stop-heading").nth(1)).toBeDisabled();
+  }
   await page.getByLabel("Product", { exact: true }).selectOption("ORS");
   const oldDemand = await page
     .locator(".simple-numbers strong")
@@ -400,6 +409,7 @@ test("refresh explains demand separately from stock and advances only for action
   await page
     .getByRole("button", { name: "Refresh workflow", exact: true })
     .click();
+  await waitAnalysis(request, 6);
   await expect(page.locator(".workflow-stop-heading").nth(1)).toHaveAttribute(
     "aria-current",
     "step",
@@ -492,13 +502,15 @@ for (const exitMethod of ["button", "logo"] as const) {
       await hospital
         .getByRole("link", { name: "Log out and return to login", exact: true })
         .click();
-    await expect(hospital).toHaveURL("http://localhost:5173/");
+    await expect(hospital).toHaveURL("http://localhost:5173/login");
     await expect(
       hospital.getByRole("status").filter({ hasText: "Kaveri’s CSV import" }),
     ).toContainText(
       "Kaveri’s CSV import, inventory and forecasts have been cleared",
     );
-    await expect(otherHospitalTab).toHaveURL("http://localhost:5173/?login=A");
+    await expect(otherHospitalTab).toHaveURL(
+      "http://localhost:5173/login?login=A",
+    );
     await expect(
       page.getByText("No hospital data imported", { exact: true }),
     ).toBeVisible();

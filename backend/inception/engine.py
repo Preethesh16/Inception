@@ -2,6 +2,8 @@
 
 import math
 from datetime import datetime, timedelta
+from itertools import pairwise
+
 from .config import POLICY
 
 
@@ -66,7 +68,7 @@ def simulate(batches, demand, as_of, arrivals=(), incoming=(), removals=None):
                 + [v for b in stock for v in (b["expiry"], b["arrival"]) if day < v < day + 1]
             )
         )
-        for t, end in zip(points, points[1:]):
+        for t, end in pairwise(points):
             for b in stock:
                 if b["expiry"] <= t and b["arrival"] <= t and b["qty"] > 0:
                     wasted[b["id"]] += b["qty"]
@@ -267,18 +269,22 @@ def risk_for(state, forecast):
     batches, arrivals = batches_for(state, fid, sid), arrivals_for(state, fid, sid)
     central = simulate(batches, forecast["planning"], as_of, arrivals)
     stress = simulate(batches, forecast["stress"], as_of, arrivals)
-    receipt_days = [
-        (dt(a["arrives_at"]) - dt(as_of)).total_seconds() / 86400
-        for a in arrivals
-        if a.get("confirmed", True) and a.get("status") != "received" and dt(a["arrives_at"]) > dt(as_of)
-    ]
-    lead = min(receipt_days, default=state["facilities"][fid]["lead_days"])
+    # Fixed inventory planning horizon, independent of supplier delivery delays.
+    from .uncertainty import inventory_distribution
+
+    uncertainty = inventory_distribution(batches, forecast, as_of, arrivals)
+    horizon = POLICY["planning_days"]
+    protected = donor_protection(state, forecast)["protected_units"]
+    stock = sum(b["quantity"] - b.get("reserved", 0) for b in batches)
+    pack = state["supplies"][sid]["pack_size"]
+    # Candidate only. Batch simulation and recipient usefulness determine actual release.
+    surplus = max(0, math.floor((stock - protected) / pack) * pack)
     days = central["stockout_days"]
     supply = state["supplies"][sid]
     tier = (
         1
         if days is not None and days < 2 and supply["critical"] and not supply["alternative"]
-        else (2 if days is not None and days < lead else 3)
+        else (2 if days is not None and days < horizon else 3)
     )
     return {
         "id": f"{fid}:{sid}",
@@ -289,9 +295,20 @@ def risk_for(state, forecast):
         "demand_7": round(sum(forecast["planning"][:7])),
         "stockout_days": days,
         "stress_stockout_days": stress["stockout_days"],
-        "before_replenishment": days is not None and days < lead,
-        "lead_days": round(lead, 2),
-        "expiry_units": round(central["waste"]),
+        "expiry_units": round(central["waste"], 3),
+        "uncertainty": uncertainty,
+        "risk_review_required": uncertainty["available"]
+        and (
+            uncertainty["shortage_probability"] > POLICY["shortage_probability_limit"]
+            or uncertainty["expected_unmet"] > pack * POLICY["expected_unmet_pack_limit"]
+        ),
+        "surplus_candidate_units": surplus,
+        "planning_horizon_days": horizon,
+        "surge_stress": {
+            name: {k: result[k] for k in ("unmet", "stockout_days", "waste")}
+            for name, path in forecast.get("surge_scenarios", {}).items()
+            for result in [simulate(batches, path, as_of, arrivals)]
+        },
         "batch_waste": central["batch_waste"],
         "unmet": central["unmet"],
         "tier": tier,
@@ -302,7 +319,9 @@ def risk_for(state, forecast):
 
 
 def in_zone(state, fid, sid):
-    return any(
+    return state.get("forecasts", {}).get(f"{fid}:{sid}", {}).get("spike_monitor", {}).get(
+        "alert", False
+    ) or any(
         i["supply_id"] == sid and distance(state["facilities"][fid], i["center"]) <= i["radius_km"]
         for i in state["incidents"].values()
     )
@@ -310,8 +329,7 @@ def in_zone(state, fid, sid):
 
 def donor_protection(state, forecast):
     """Exact reserve arithmetic shared by donor validation and agent evidence."""
-    lead = state["facilities"][forecast["facility_id"]]["lead_days"]
-    horizon = max(POLICY["protection_min_days"], lead + POLICY["lead_margin_days"])
+    horizon = POLICY["planning_days"]
     supported = horizon <= POLICY["horizon"]
     stress_units = sum(forecast["stress"][:horizon]) if supported else None
     buffer = forecast["normal_daily"] * POLICY["donor_buffer_days"]
@@ -342,13 +360,64 @@ def donor_safe(state, fid, sid, removals):
         arrivals_for(state, fid, sid),
         removals=removals,
     )
-    return sim["unmet"] < 1e-6
+    from .uncertainty import inventory_distribution
+
+    distribution = inventory_distribution(
+        batches_for(state, fid, sid),
+        fc,
+        state["settings"]["demo"]["as_of"],
+        arrivals_for(state, fid, sid),
+        removals=removals,
+    )
+    budget = state["supplies"][sid]["pack_size"] * POLICY["expected_unmet_pack_limit"]
+    return sim["unmet"] < 1e-6 and (
+        not distribution["available"]
+        or (
+            distribution["shortage_probability"] <= POLICY["shortage_probability_limit"] + 1e-9
+            and distribution["expected_unmet"] <= budget + 1e-9
+        )
+    )
+
+
+def expiry_donor_safe(state, fid, sid, removals):
+    """Permit expiry rescue despite a later deficit only if no evaluated path is harmed."""
+    fc = state["forecasts"].get(f"{fid}:{sid}")
+    if not fc:
+        return False
+    batches, arrivals = batches_for(state, fid, sid), arrivals_for(state, fid, sid)
+    as_of = state["settings"]["demo"]["as_of"]
+    for path in [fc["planning"], fc["stress"], *fc.get("scenarios", {}).get("paths", [])]:
+        before = simulate(batches, path, as_of, arrivals)
+        # Every offered unit must otherwise expire in EACH evaluated path.
+        if any(before["batch_waste"].get(bid, 0) < qty - 1e-6 for bid, qty in removals.items()):
+            return False
+        after = simulate(batches, path, as_of, arrivals, removals=removals)
+        if after["unmet"] > before["unmet"] + 1e-6:
+            return False
+    return True
+
+
+def recipient_safe(state, fid, sid, incoming, arrivals=None):
+    from .uncertainty import inventory_distribution
+
+    fc = state["forecasts"][f"{fid}:{sid}"]
+    batches = batches_for(state, fid, sid)
+    arrivals = arrivals_for(state, fid, sid) if arrivals is None else arrivals
+    as_of = state["settings"]["demo"]["as_of"]
+    before = inventory_distribution(batches, fc, as_of, arrivals)
+    after = inventory_distribution(batches, fc, as_of, arrivals, incoming)
+    if not before["available"]:
+        return True  # Legacy/offline forecasts retain deterministic checks.
+    return (
+        after["expected_waste"] <= before["expected_waste"] + 1e-6
+        and after["expected_unmet"] <= before["expected_unmet"] + 1e-6
+    )
 
 
 def allocate(state):
     as_of = state["settings"]["demo"]["as_of"]
     risks = {key: risk_for(state, fc) for key, fc in state["forecasts"].items()}
-    from .redistribution import search_decisions, expiry_matches
+    from .redistribution import expiry_matches, search_decisions
 
     searches = search_decisions(state, risks)
     moves, rejected, deficits = [], [], []
@@ -415,10 +484,9 @@ def allocate(state):
                 )
                 if sim["unmet"] < supply["pack_size"] or sim["stockout_days"] is None:
                     continue
-                f = state["facilities"][fid]
                 eligible.append(
                     (
-                        (r["tier"], sim["stockout_days"], -f["emergency_share"], -f["patient_load"], fid),
+                        (r["tier"], sim["stockout_days"], -sim["unmet"], fid),
                         r,
                         sim,
                     )
@@ -443,7 +511,7 @@ def allocate(state):
             )
             found = False
 
-            def reject_batch(batch, reason):
+            def reject_batch(batch, reason, fid=fid, sid=sid):
                 entry = {
                     "facility_id": batch["facility_id"],
                     "recipient_id": fid,
@@ -493,6 +561,7 @@ def allocate(state):
                     after["consumed"].get(inc["id"], 0) < supply["pack_size"] - 1e-6
                     or after["unmet"] >= before["unmet"] - 1e-6
                     or after["waste"] > before["waste"] + 1e-6
+                    or not recipient_safe(state, fid, sid, incoming[fid] + [inc])
                 ):
                     reject_batch(
                         b,
@@ -522,7 +591,7 @@ def allocate(state):
                         "tier": recipient["tier"],
                         "before": recipient["stockout_days"],
                         "before_unmet": recipient["unmet"],
-                        "reason": f"Priority {recipient['tier']}; lowest coverage first, then emergency demand and patient load. Donor stress demand plus reserve protected.",
+                        "reason": f"Priority {recipient['tier']}; lowest coverage first, then unmet inventory demand. Donor demand scenarios and reserve protected.",
                     }
                     moves.append(match)
                 line = next((line for line in match["lines"] if line["batch_id"] == b["id"]), None)

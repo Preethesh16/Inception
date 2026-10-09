@@ -840,6 +840,8 @@ function Inventory({ data }: { data: Snapshot }) {
               <th>7-day demand</th>
               <th>Stock-out</th>
               <th>Expiry exposure</th>
+              <th>Simulated 28-day risk</th>
+              <th>Surplus candidate</th>
             </tr>
           </thead>
           <tbody>
@@ -857,17 +859,55 @@ function Inventory({ data }: { data: Snapshot }) {
                   <td>{fmt(r?.reserved)}</td>
                   <td>{fmt(r?.demand_7)}</td>
                   <td>
-                    <Badge tone={r?.before_replenishment ? "red" : "green"}>
+                    <Badge
+                      tone={
+                        r?.stockout_days != null || r?.risk_review_required
+                          ? "red"
+                          : "green"
+                      }
+                    >
                       {r ? days(r.stockout_days) : "Awaiting import"}
                     </Badge>
                   </td>
                   <td>{fmt(r?.expiry_units)}</td>
+                  <td>
+                    {r?.uncertainty?.available ? (
+                      <>
+                        <strong>
+                          {(
+                            (r.uncertainty.shortage_probability ?? 0) * 100
+                          ).toFixed(1)}
+                          % shortage
+                        </strong>
+                        <small>
+                          Average unmet: {fmt(r.uncertainty.expected_unmet)} ·
+                          Average expiry: {fmt(r.uncertainty.expected_waste)}
+                        </small>
+                        <small>
+                          {r.uncertainty.status.replaceAll("_", " ")} ·{" "}
+                          {r.uncertainty.independent_windows} non-overlapping
+                          history windows
+                        </small>
+                      </>
+                    ) : (
+                      "Insufficient forecast-error history"
+                    )}
+                  </td>
+                  <td>
+                    {fmt(r?.surplus_candidate_units)}
+                    <small>Subject to batch and recipient checks</small>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <p className="microcopy">
+        Simulation frequencies depend on historical forecast errors; they are
+        not guaranteed probabilities. Surplus is relative to the next 28 days.
+        Sudden-surge scenarios are stress tests, not outbreak predictions.
+      </p>
     </Card>
   );
 }
@@ -1223,7 +1263,7 @@ function Proposal({
         <small>WHY THIS TRANSFER IS RECOMMENDED</small>
         <h4>{n.purpose === "expiry_rescue" ? "Use supplies before they expire." : "Help cover the receiving hospital’s forecast demand."}</h4>
         <p>{n.purpose === "expiry_rescue"
-          ? `The forecast indicates ${NAME[n.recipient]} can use these ${fmt(n.quantity)} ${supply?.unit} before expiry. The supplying hospital keeps its protected demand and reserve.`
+          ? `The forecast indicates ${NAME[n.recipient]} can use these ${fmt(n.quantity)} ${supply?.unit} before expiry. Releasing these otherwise wasted units does not increase supplying-hospital unmet demand in any evaluated path.`
           : `The forecast identified a supply gap at ${NAME[n.recipient]}. This offer provides ${fmt(n.quantity)} ${supply?.unit} while protecting the supplying hospital’s forecast demand and reserve. ${n.remaining_unmet > 0 ? `${fmt(n.remaining_unmet)} units of forecast demand still need another source.` : "The evaluated forecast gap is covered by the planned allocations."}`}</p>
         <p className="microcopy">These are planning estimates. Stock moves only after both hospitals approve this version.</p>
         {briefing && <div className="contract-agent"><strong>Your hospital agent’s recommendation</strong><p>{briefing.text}</p><small>{briefing.mode}</small></div>}
@@ -1443,7 +1483,8 @@ function Operations({
   );
   const supply = network.supplies.find((s) => s.id === sid);
   const gate = network.allocation?.searches?.[facility + ":" + sid];
-  const searchNeeded = !!gate && gate.kind !== "none";
+  const searchNeeded =
+    gate?.kind === "donor_search" || gate?.kind === "recipient_search";
   const searchDone =
     searchNeeded &&
     network.events.some(

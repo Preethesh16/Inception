@@ -5,9 +5,11 @@ import math
 import time
 import traceback
 import uuid
-from .store import Store, now, emit
-from .forecast import history_at, build_forecasts
-from .engine import detect, allocate
+
+from .config import POLICY
+from .engine import allocate, detect
+from .forecast import build_forecasts, history_at
+from .store import Store, emit, now
 
 
 def run_job(store, job):
@@ -87,8 +89,10 @@ def run_job(store, job):
                     key,
                 )
             previous_run = current["runs"].get(current["settings"]["demo"].get("latest_run"), {})
-            unchanged = previous_run.get("revision") == revision and "searches" in current["allocations"].get(
-                previous_run.get("id"), {}
+            unchanged = (
+                previous_run.get("revision") == revision
+                and previous_run.get("evaluation", {}).get("input_hash") == evaluation["input_hash"]
+                and "searches" in current["allocations"].get(previous_run.get("id"), {})
             )
             baseline_only = state["settings"]["demo"].get("mode") == "three-hospital" and not state["settings"]["demo"].get("workflow_started", False)
             for old in [] if unchanged and not baseline_only else current["negotiations"].values():
@@ -108,7 +112,7 @@ def run_job(store, job):
                     "round": 1,
                     "status": "Awaiting approvals",
                     "approvals": [],
-                    "policy_version": "1.0",
+                    "policy_version": POLICY["version"],
                     "messages": [],
                     "created_at": now(),
                 }
@@ -141,7 +145,7 @@ def run_job(store, job):
                     n["messages"][0].update(
                         actor=move["donor"],
                         type="expiry offer",
-                        text=f"Offer {move['quantity']} units projected to expire unused locally. Donor stress demand and reserve remain protected.",
+                        text=f"Offer {move['quantity']} units projected to expire unused locally. Removing these units does not increase donor unmet demand in any evaluated path.",
                     )
                     n["messages"][1].update(
                         actor=move["recipient"],
@@ -207,7 +211,7 @@ def main():
         if job:
             try:
                 run_job(store, job)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- durable worker records job failure and continues
                 traceback.print_exc()
                 job.update(status="failed", error=str(exc)[:500], completed_at=now())
                 store.update_job(job)

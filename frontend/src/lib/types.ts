@@ -38,9 +38,23 @@ export type Risk = {
   demand_7: number;
   stockout_days: number | null;
   stress_stockout_days: number | null;
-  before_replenishment: boolean;
-  lead_days: number;
   expiry_units: number;
+  surplus_candidate_units?: number;
+  planning_horizon_days?: number;
+  risk_review_required?: boolean;
+  surge_stress?: Record<
+    string,
+    { unmet: number; stockout_days: number | null; waste: number }
+  >;
+  uncertainty?: {
+    available: boolean;
+    status: string;
+    shortage_probability?: number;
+    expected_unmet?: number;
+    unmet_p95?: number;
+    expected_waste?: number;
+    independent_windows?: number;
+  };
   unmet: number;
   tier: number;
   model: string;

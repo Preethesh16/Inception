@@ -19,7 +19,10 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
     );
   const history = forecast.history
     .slice(-14)
-    .map((h) => ({ date: h.date.slice(5, 10), actual: h.quantity }));
+    .map((h) => ({
+      date: h.date.slice(5, 10),
+      actual: h.imputed ? null : h.quantity,
+    }));
   const future = forecast.planning.map((p, i) => {
     const d = new Date(forecast.cutoff);
     d.setUTCDate(d.getUTCDate() + i);
@@ -64,7 +67,7 @@ export function ForecastChart({ forecast }: { forecast?: Forecast }) {
             stroke="none"
             fill="var(--forecast-band, #dceae7)"
             fillOpacity={0.65}
-            name="Daily P10–P90"
+            name="Daily interval (empirically widened)"
           />
           <Line
             isAnimationActive={false}

@@ -39,7 +39,7 @@ export function NetworkMap({
     const r = data.risks.find(
       (r) => r.facility_id === id && r.supply_id === supply,
     );
-    return r?.before_replenishment
+    return r?.stockout_days != null || r?.risk_review_required
       ? "#dc2626"
       : data.incidents.some(
             (i) => i.supply_id === supply && i.facilities.includes(id),

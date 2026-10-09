@@ -129,9 +129,9 @@ def snapshot(who=Depends(actor)):
     for fid in s["facilities"]:
         expected = set(facility_supplies[fid])
         local = [r for r in all_risks if r["facility_id"] == fid and r["supply_id"] in expected]
-        if any(r["before_replenishment"] or (r["stockout_days"] is not None and r["stockout_days"] <= 2) for r in local):
+        if any(r["stockout_days"] is not None and r["stockout_days"] <= 2 for r in local):
             level = "high"
-        elif any(r["stockout_days"] is not None or r["stress_stockout_days"] is not None for r in local):
+        elif any(r["stockout_days"] is not None or r["stress_stockout_days"] is not None or r.get("risk_review_required", False) for r in local):
             level = "moderate"
         elif not expected or expected - {r["supply_id"] for r in local}:
             level = "unknown"

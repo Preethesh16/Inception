@@ -6278,3 +6278,10 @@ html {
   .backend-pipeline button > span { position: relative; z-index: 1; background: #0c0d10; }
   .backend-theme .trio-main { margin-left: 0; width: 100%; padding: 24px 16px; }
 }
+
+/* Keep the welcome guide behind the sign-in form on narrow screens. */
+@media (max-width: 600px) {
+  .login-backdrop > .care-mascot {
+    z-index: 0;
+  }
+}

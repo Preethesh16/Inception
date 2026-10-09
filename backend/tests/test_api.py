@@ -77,15 +77,16 @@ def test_explicit_live_inference_bypasses_cache(client):
     assert result.json()["force"] is True
 
 
-def test_network_map_shares_risk_levels_without_private_details(client, store, monkeypatch):
+@pytest.mark.parametrize("stress_days,risk_review", [(10, False), (None, True)])
+def test_network_map_shares_risk_levels_without_private_details(client, store, monkeypatch, stress_days, risk_review):
     def calculated_risk(state, forecast):
         fid = forecast["facility_id"]
         return {
             "facility_id": fid,
             "supply_id": forecast["supply_id"],
-            "before_replenishment": fid == "A",
             "stockout_days": 1 if fid == "A" else None,
-            "stress_stockout_days": 10 if fid == "B" else None,
+            "stress_stockout_days": stress_days if fid == "B" else None,
+            "risk_review_required": risk_review if fid == "B" else False,
         }
     monkeypatch.setattr(api, "risk_for", calculated_risk)
     result = client.get("/snapshot", headers=headers()).json()

@@ -12,15 +12,17 @@ def steady(state):
     for b in state["batches"].values():
         b.update(quantity=5000, reserved=0, expires_at=expiry, quarantined=False)
     for f in state["forecasts"].values():
+        f.pop("scenarios", None)
+        f.pop("spike_monitor", None)
         f.update(planning=[10.0] * 28, stress=[10.0] * 28, normal_daily=10)
     return state
 
 
-def test_adequate_stock_does_not_search_or_negotiate(state):
+def test_surplus_search_does_not_negotiate_without_recipient_need(state):
     s = steady(state)
     result = allocate(s)
-    assert all(d["kind"] == "none" for d in result["searches"].values())
-    assert result["moves"] == [] and result["rejected"] == []
+    assert all(d["kind"] == "recipient_search" for d in result["searches"].values())
+    assert result["moves"] == []
 
 
 def test_locally_needed_expiry_is_not_surplus(state):
@@ -29,7 +31,7 @@ def test_locally_needed_expiry_is_not_surplus(state):
         quantity=20, expires_at=(dt(s["settings"]["demo"]["as_of"]) + timedelta(days=4)).isoformat()
     )
     result = allocate(s)
-    assert result["searches"]["A:ORS"]["kind"] == "none"
+    assert not result["searches"]["A:ORS"]["expiry_search"]
     assert result["moves"] == []
 
 
@@ -56,7 +58,9 @@ def test_unused_expiry_does_not_create_recipient_demand(state):
     s = steady(state)
     for f in s["forecasts"].values():
         if f["facility_id"] != "A":
-            f.update(planning=[0.0] * 28, stress=[0.0] * 28, normal_daily=0)
+            f.pop("scenarios", None)
+        f.pop("spike_monitor", None)
+        f.update(planning=[0.0] * 28, stress=[0.0] * 28, normal_daily=0)
     s["batches"]["A-ORS-01"].update(
         quantity=200, expires_at=(dt(s["settings"]["demo"]["as_of"]) + timedelta(days=4)).isoformat()
     )

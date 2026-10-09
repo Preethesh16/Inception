@@ -32,7 +32,7 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     title: "Donor protection",
-    body: "Partners keep at least seven days of their own forecast demand, so helping a neighbour never creates a new shortage.",
+    body: "Partners retain 28 days of higher-demand planning stock plus a normal-day buffer. Batch-level simulations check shortage severity and expiry before sharing.",
   },
   {
     icon: MessagesSquare,
@@ -49,7 +49,7 @@ const FEATURES = [
 const FACTS = [
   ["28", "days of daily forecasts"],
   ["2", "approvals on every transfer"],
-  ["7+", "days of donor stock protected"],
+  ["28", "days of donor stock protected"],
 ];
 
 const FAQ = [
@@ -59,11 +59,11 @@ const FAQ = [
   },
   {
     q: "Can a donor hospital run short by giving stock away?",
-    a: "Donors keep a protected reserve covering the longer of seven days or delivery lead time plus two days, and only hospitals with no projected shortage are asked to give.",
+    a: "Donors retain 28 days of higher-demand planning stock plus a normal-day buffer. Transfers also undergo batch-level shortage and expiry checks. Expiry rescue can release units that would otherwise be wasted without increasing donor unmet demand in any evaluated path.",
   },
   {
     q: "How reliable are the forecasts?",
-    a: "Each forecast is checked against two simple baselines at past cutoffs, and the model with the lowest error is used. Uncertainty is always shown, not hidden.",
+    a: "Chronos-2 supplies the forecasts. Historical checks compare it with two simple baselines and evaluate error and interval coverage. Historical-error scenarios estimate shortage and expiry exposure; these estimates depend on limited past evidence and are not guaranteed probabilities.",
   },
   {
     q: "What happens to stock that is about to expire?",
