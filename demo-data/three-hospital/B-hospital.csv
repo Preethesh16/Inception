@@ -3,12 +3,12 @@ profile,B,Chamundi Community Hospital,Chamundi foothills,12.3,76.679,180,0.22,11
 supply,,Oral rehydration salts,,,,,,,B,ORS,sachet,10,ambient,,,,,,,,,
 supply,,IV saline 500 ml,,,,,,,B,SAL,bag,5,ambient,,,,,,,,,
 supply,,Surgical masks,,,,,,,B,MSK,mask,50,dry,,,,,,,,,
-batch,B-ORS-01,,,,,,,,B,ORS,sachet,,ambient,LOT-B-ORS-01,250,2026-10-17T00:00:00+00:00,,,,,,
-batch,B-ORS-02,,,,,,,,B,ORS,sachet,,ambient,LOT-B-ORS-02,1750,2026-12-19T00:00:00+00:00,,,,,,
-batch,B-SAL-01,,,,,,,,B,SAL,bag,,ambient,LOT-B-SAL-01,250,2026-10-17T00:00:00+00:00,,,,,,
-batch,B-SAL-02,,,,,,,,B,SAL,bag,,ambient,LOT-B-SAL-02,570,2026-12-19T00:00:00+00:00,,,,,,
-batch,B-MSK-01,,,,,,,,B,MSK,mask,,dry,LOT-B-MSK-01,250,2026-10-17T00:00:00+00:00,,,,,,
-batch,B-MSK-02,,,,,,,,B,MSK,mask,,dry,LOT-B-MSK-02,5320,2026-12-19T00:00:00+00:00,,,,,,
+batch,B-ORS-01,,,,,,,,B,ORS,sachet,,ambient,LOT-B-ORS-01,90,2026-10-17T00:00:00+00:00,,,,,,
+batch,B-ORS-02,,,,,,,,B,ORS,sachet,,ambient,LOT-B-ORS-02,3510,2026-12-19T00:00:00+00:00,,,,,,
+batch,B-SAL-01,,,,,,,,B,SAL,bag,,ambient,LOT-B-SAL-01,40,2026-10-17T00:00:00+00:00,,,,,,
+batch,B-SAL-02,,,,,,,,B,SAL,bag,,ambient,LOT-B-SAL-02,600,2026-12-19T00:00:00+00:00,,,,,,
+batch,B-MSK-01,,,,,,,,B,MSK,mask,,dry,LOT-B-MSK-01,400,2026-10-17T00:00:00+00:00,,,,,,
+batch,B-MSK-02,,,,,,,,B,MSK,mask,,dry,LOT-B-MSK-02,4450,2026-12-19T00:00:00+00:00,,,,,,
 consumption,,,,,,189,0.22,,B,ORS,,,,,35,,2026-02-10,1,0,0,,
 consumption,,,,,,185,0.22,,B,ORS,,,,,23,,2026-02-11,1,0,0,,
 consumption,,,,,,180,0.22,,B,ORS,,,,,33,,2026-02-12,1,0,0,,
@@ -720,6 +720,6 @@ consumption,,,,,,180,0.22,,B,MSK,,,,,155,,2026-10-01,1,0,0,,
 consumption,,,,,,196,0.22,,B,MSK,,,,,182,,2026-10-02,1,0,0,,
 consumption,,,,,,158,0.22,,B,MSK,,,,,143,,2026-10-03,1,0,0,,
 consumption,,,,,,147,0.22,,B,MSK,,,,,140,,2026-10-04,1,0,0,,
-replenishment,PO-B-ORS,,,,,,,,B,ORS,sachet,,ambient,,720,2027-01-13T00:00:00+00:00,,,,,2026-10-16T00:00:00+00:00,1
-replenishment,PO-B-SAL,,,,,,,,B,SAL,bag,,ambient,,360,2027-01-13T00:00:00+00:00,,,,,2026-10-16T00:00:00+00:00,1
-replenishment,PO-B-MSK,,,,,,,,B,MSK,mask,,dry,,3360,2027-01-13T00:00:00+00:00,,,,,2026-10-16T00:00:00+00:00,1
+replenishment,PO-B-ORS,,,,,,,,B,ORS,sachet,,ambient,,720,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1
+replenishment,PO-B-SAL,,,,,,,,B,SAL,bag,,ambient,,360,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1
+replenishment,PO-B-MSK,,,,,,,,B,MSK,mask,,dry,,3360,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1

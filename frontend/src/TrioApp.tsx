@@ -1,17 +1,20 @@
+import { Network, Hospital } from "lucide-react";
+import StockRequests from "./components/StockRequests";
 import {
   lazy,
   Suspense,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { LanguagePicker } from "./i18n/Language";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   History,
+  Lightbulb,
   SlidersHorizontal,
   Bike,
   PackageCheck,
@@ -32,6 +35,7 @@ import { ForecastSummary } from "./components/ForecastSummary";
 import { NetworkMap } from "./components/NetworkMap";
 import { CsvUpload } from "./components/CsvUpload";
 import { UsageExplorer, type UsageGuidance } from "./components/UsageExplorer";
+import { InventoryInsights } from "./components/InventoryInsights";
 import { InventoryExplorer } from "./components/InventoryExplorer";
 import { AuditExplorer } from "./components/AuditExplorer";
 import { NearbyHospitals } from "./components/NearbyHospitals";
@@ -447,10 +451,15 @@ export function TrioLanding({ page = "home" }: { page?: "home" | "login" }) {
 const nav = [
   ["Onboarding", Upload],
   ["Past usage", History],
+  ["Insights", Lightbulb],
   ["Inventory management", SlidersHorizontal],
+  ["Stock requests", Network],
   ["Approvals", CheckCircle2],
 ] as const;
 export default function TrioApp() {
+  const [requestGuidance, setRequestGuidance] = useState<UsageGuidance>();
+  const [mapGuidance, setMapGuidance] = useState<UsageGuidance>();
+  const [insightGuidance, setInsightGuidance] = useState<UsageGuidance>();
   const [usageGuidance, setUsageGuidance] = useState<UsageGuidance>();
   const [inventoryGuidance, setInventoryGuidance] = useState<UsageGuidance>();
   const [importProgress, setImportProgress] = useState<ImportProgress>({
@@ -548,10 +557,14 @@ export default function TrioApp() {
       setBusy(false);
     }
   }
-  const [pipelineTarget, setPipelineTarget] = useState<HTMLDivElement | null>(null);
+  const [pipelineTarget, setPipelineTarget] = useState<HTMLDivElement | null>(
+    null,
+  );
   const data = sessionExpired ? undefined : q.data;
   return (
-    <div className={"app-shell trio-shell" + (consoleMode ? " backend-theme" : "")}>
+    <div
+      className={"app-shell trio-shell" + (consoleMode ? " backend-theme" : "")}
+    >
       <aside className="sidebar">
         <a
           className="brand"
@@ -576,7 +589,10 @@ export default function TrioApp() {
         ) : (
           <>
             <div className="workspace-label">HOSPITAL WORKSPACE</div>
-            <div className="trio-identity"><strong>{NAME[actor]}</strong><small>{EMAILS[actor]}</small></div>
+            <div className="trio-identity">
+              <Hospital size={22} aria-hidden="true" />
+              <strong>{NAME[actor]}</strong>
+            </div>
           </>
         )}
         {!consoleMode && (
@@ -593,20 +609,6 @@ export default function TrioApp() {
             ))}
           </nav>
         )}
-        {!consoleMode && <div className="sidebar-bottom">
-          <a
-            href={
-              consoleMode
-                ? "http://localhost:5173"
-                : "http://localhost:5174/?hospital=" + actor
-            }
-            target="_blank"
-            rel="noreferrer"
-          >
-            {consoleMode ? "Hospital login" : "Operations console"} ↗
-          </a>
-          <small>Local synthetic demonstration</small>
-        </div>}
       </aside>
       <main className="trio-main">
         <header className="trio-header">
@@ -639,6 +641,7 @@ export default function TrioApp() {
             </Button>
           )}
         </header>
+        <LanguagePicker promptOnEntry />
         {(error || q.error) && (
           <div role="alert" className="notice notice-danger">
             {error || String(q.error)}
@@ -649,7 +652,12 @@ export default function TrioApp() {
         ) : (
           <>
             {consoleMode ? (
-              <Operations data={data} act={act} busy={busy} pipelineTarget={pipelineTarget} />
+              <Operations
+                data={data}
+                act={act}
+                busy={busy}
+                pipelineTarget={pipelineTarget}
+              />
             ) : (
               <>
                 {tab === "Onboarding" && (
@@ -663,7 +671,7 @@ export default function TrioApp() {
                       title="Nearby hospitals"
                       sub="Live supply-risk overview across your hospital network."
                     >
-                      <NearbyHospitals data={data} />
+                      <NearbyHospitals data={data} onExplain={setMapGuidance} />
                     </Card>
                   </>
                 )}
@@ -681,12 +689,21 @@ export default function TrioApp() {
                     </details>
                   </>
                 )}{" "}
+                {tab === "Insights" && (
+                  <InventoryInsights
+                    data={data}
+                    actor={actor}
+                    onExplain={setInsightGuidance}
+                  />
+                )}
                 {tab === "Past usage" && (
                   <Records data={data} onExplain={setUsageGuidance} />
                 )}{" "}
+                {tab === "Stock requests" && <StockRequests data={data} actor={actor} onExplain={setRequestGuidance} />}
                 {tab === "Approvals" && (
                   <>
                     <Approvals
+                      error={error}
                       data={data}
                       actor={actor}
                       act={act}
@@ -719,6 +736,9 @@ export default function TrioApp() {
             data={data}
             tab={tab}
             progress={importProgress}
+            requestGuidance={requestGuidance}
+            mapGuidance={mapGuidance}
+            insightGuidance={insightGuidance}
             usageGuidance={usageGuidance}
             inventoryGuidance={inventoryGuidance}
           />
@@ -1162,11 +1182,13 @@ function Approvals({
   actor,
   act,
   busy,
+  error,
 }: {
   data: Snapshot;
   actor: string;
   act: (p: string, b?: unknown) => Promise<boolean>;
   busy: boolean;
+  error: string;
 }) {
   const offers = data.negotiations.filter(
     (n) =>
@@ -1186,6 +1208,7 @@ function Approvals({
       {offers.length ? (
         offers.map((n) => (
           <Proposal
+            error={error}
             key={n.id}
             n={n}
             data={data}
@@ -1221,21 +1244,35 @@ function Proposal({
   actor,
   act,
   busy,
+  error,
 }: {
   n: Negotiation;
   data: Snapshot;
   actor: string;
   act: (p: string, b?: unknown) => Promise<boolean>;
   busy: boolean;
+  error: string;
 }) {
+  const [approvalAttempted, setApprovalAttempted] = useState(false);
   const [quantity, setQuantity] = useState(n.quantity);
   const supply = data.supplies.find((s) => s.id === n.supply_id);
-  const briefing = [...n.messages].reverse().find((m) =>
-    m.briefing_for === actor && m.version === n.version && m.quantity === n.quantity);
+  const briefing = [...n.messages]
+    .reverse()
+    .find(
+      (m) =>
+        m.briefing_for === actor &&
+        m.version === n.version &&
+        m.quantity === n.quantity,
+    );
   useEffect(() => setQuantity(n.quantity), [n.quantity, n.version]);
   return (
-    <article className="trio-proposal transfer-contract" data-proposal-id={n.id}>
-      <div className="contract-reference">TRANSFER AGREEMENT · {n.id} · VERSION {n.version}</div>
+    <article
+      className="trio-proposal transfer-contract"
+      data-proposal-id={n.id}
+    >
+      <div className="contract-reference">
+        TRANSFER AGREEMENT · {n.id} · VERSION {n.version}
+      </div>
       <div className="entry-top">
         <h3>{supply?.name || n.supply_id}</h3>
         <Badge tone={n.status === "Reserved" ? "green" : "amber"}>
@@ -1243,26 +1280,57 @@ function Proposal({
         </Badge>
       </div>
       <div className="contract-parties">
-        <div><small>Supplying hospital</small><strong>{NAME[n.donor]}</strong></div>
+        <div>
+          <small>Supplying hospital</small>
+          <strong>{NAME[n.donor]}</strong>
+        </div>
         <span aria-hidden="true">→</span>
-        <div><small>Receiving hospital</small><strong>{NAME[n.recipient]}</strong></div>
+        <div>
+          <small>Receiving hospital</small>
+          <strong>{NAME[n.recipient]}</strong>
+        </div>
       </div>
       <dl className="contract-terms">
-        <div><dt>Agreed quantity</dt><dd>{fmt(n.quantity)} {supply?.unit}</dd></div>
-        <div><dt>Maximum safe offer</dt><dd>{fmt(n.max_quantity)} {supply?.unit}</dd></div>
-        <div><dt>Estimated arrival · demo time</dt><dd>{new Date(n.eta).toLocaleString()}</dd></div>
+        <div>
+          <dt>Agreed quantity</dt>
+          <dd>
+            {fmt(n.quantity)} {supply?.unit}
+          </dd>
+        </div>
+        <div>
+          <dt>Maximum safe offer</dt>
+          <dd>
+            {fmt(n.max_quantity)} {supply?.unit}
+          </dd>
+        </div>
+        <div>
+          <dt>Estimated arrival · demo time</dt>
+          <dd>{new Date(n.eta).toLocaleString()}</dd>
+        </div>
       </dl>
       <div className="contract-batches">
-        {n.lines.map((line, i) => <div key={line.batch_id || i}>
-          <strong>{line.lot || line.batch_id || "Allocated batch"}</strong>
-          <span>{fmt(line.quantity)} {supply?.unit}</span>
-          <span>Expiry: {line.expires_at ? new Date(line.expires_at).toLocaleDateString() : "Not supplied"}</span>
-        </div>)}
+        {n.lines.map((line, i) => (
+          <div key={line.batch_id || i}>
+            <strong>{line.lot || line.batch_id || "Allocated batch"}</strong>
+            <span>
+              {fmt(line.quantity)} {supply?.unit}
+            </span>
+            <span>
+              Expiry:{" "}
+              {line.expires_at
+                ? new Date(line.expires_at).toLocaleDateString()
+                : "Not supplied"}
+            </span>
+          </div>
+        ))}
       </div>
-      <section className="contract-explanation" aria-label="Decision explanation">
+      <section
+        className="contract-explanation"
+        aria-label="Decision explanation"
+      >
         <small>WHY THIS TRANSFER IS RECOMMENDED</small>
-        <h4>{n.purpose === "expiry_rescue" ? "Use supplies before they expire." : "Help cover the receiving hospital’s forecast demand."}</h4>
-        <p>{n.purpose === "expiry_rescue"
+        <h4>{n.purpose === "manual_request" ? "Hospital-requested stock transfer." : n.purpose === "expiry_rescue" ? "Use supplies before they expire." : "Help cover the receiving hospital’s forecast demand."}</h4>
+        <p>{n.purpose === "manual_request" ? `Both hospitals agreed to this manual stock request after reviewing forecast advice. Requested reason: ${n.reason}` : n.purpose === "expiry_rescue"
           ? `The forecast indicates ${NAME[n.recipient]} can use these ${fmt(n.quantity)} ${supply?.unit} before expiry. Releasing these otherwise wasted units does not increase supplying-hospital unmet demand in any evaluated path.`
           : `The forecast identified a supply gap at ${NAME[n.recipient]}. This offer provides ${fmt(n.quantity)} ${supply?.unit} while protecting the supplying hospital’s forecast demand and reserve. ${n.remaining_unmet > 0 ? `${fmt(n.remaining_unmet)} units of forecast demand still need another source.` : "The evaluated forecast gap is covered by the planned allocations."}`}</p>
         <p className="microcopy">These are planning estimates. Stock moves only after both hospitals approve this version.</p>
@@ -1302,22 +1370,32 @@ function Proposal({
         ))}
       </details>
       <div className="contract-signatures">
-        {[n.donor, n.recipient].map((id) => <div key={id}>
-          <small>{id === n.donor ? "Supplier approval" : "Recipient approval"}</small>
-          <strong>{NAME[id]}</strong>
-          <span>{n.approvals.includes(id) ? `Approved · version ${n.version}` : "Awaiting administrator approval"}</span>
-        </div>)}
+        {[n.donor, n.recipient].map((id) => (
+          <div key={id}>
+            <small>
+              {id === n.donor ? "Supplier approval" : "Recipient approval"}
+            </small>
+            <strong>{NAME[id]}</strong>
+            <span>
+              {n.approvals.includes(id)
+                ? `Approved · version ${n.version}`
+                : "Awaiting administrator approval"}
+            </span>
+          </div>
+        ))}
       </div>
       {actor !== "judge" && n.status === "Awaiting approvals" && (
         <>
+          {approvalAttempted && error && <p role="alert" className="error">{error}</p>}
           <div className="trio-actions">
             <Button
               disabled={busy || n.approvals.includes(actor)}
-              onClick={() =>
-                act("/negotiations/" + n.id + "/approve", {
+              onClick={() => {
+                setApprovalAttempted(true);
+                return act("/negotiations/" + n.id + "/approve", {
                   version: n.version,
-                })
-              }
+                });
+              }}
             >
               {n.approvals.includes(actor)
                 ? "You approved"
@@ -1458,17 +1536,65 @@ function Operations({
     if (!products.some((s) => s.id === sid)) {
       setSid(products[0]?.id || "");
       setStage(1);
-      setWalking(false);
+
       setRequested(false);
     }
   }, [facility, products.map((s) => s.id).join(","), sid]);
   const [stage, setStage] = useState(1);
-  const [follow, setFollow] = useState(true);
-  const [walking, setWalking] = useState(false);
+  const [interaction, setInteraction] = useState<
+    { title: string; text: string } | undefined
+  >();
+  useEffect(
+    () => setInteraction(undefined),
+    [stage, facility, sid, network.demo.latest_run],
+  );
   const [requested, setRequested] = useState(false);
   const priorRun = useRef(network.demo.latest_run);
   const priorJob = useRef<string | undefined>(undefined);
   const panels = useRef<(HTMLElement | null)[]>([]);
+  const [visibleStage, setVisibleStage] = useState(1);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const readingLine = window.innerHeight * 0.3;
+      const visible = panels.current
+        .map((panel, index) => ({
+          panel,
+          index,
+          rect: panel?.getBoundingClientRect(),
+        }))
+        .filter(
+          ({ panel, rect }) =>
+            panel?.querySelector(".workflow-stop-body") &&
+            rect &&
+            rect.bottom > 0 &&
+            rect.top < window.innerHeight,
+        );
+      const focused =
+        visible.find(
+          ({ rect }) => rect!.top <= readingLine && rect!.bottom > readingLine,
+        ) ||
+        visible.sort(
+          (a, b) =>
+            Math.abs(a.rect!.top - readingLine) -
+            Math.abs(b.rect!.top - readingLine),
+        )[0];
+      if (focused) setVisibleStage(focused.index + 1);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [stage, facility, sid]);
+  useEffect(() => setInteraction(undefined), [visibleStage]);
   const active = network.jobs.findLast((j) =>
     ["queued", "running"].includes(j.status),
   );
@@ -1561,54 +1687,26 @@ function Operations({
     deliveries.length > 0 && deliveries.every((t) => t.status === "Received"),
   ];
 
-  function select(next: number, manual = false) {
-    if (manual) setWalking(follow);
+  function select(next: number) {
+    setInteraction(undefined);
     setStage(next);
+    // Navigate only in response to an explicit stage selection.
+    const heading = panels.current[next - 1]?.querySelector<HTMLButtonElement>(".workflow-stop-heading");
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ behavior: "instant", block: "start" });
   }
   useEffect(() => {
     if (!requested) return;
     if (failed && latestJob?.id !== priorJob.current) {
       setRequested(false);
-      setWalking(false);
+
       return;
     }
     if (!active && network.demo.latest_run !== priorRun.current) {
       setRequested(false);
-      setWalking(true);
+
     }
   }, [requested, active?.id, network.demo.latest_run, failed, latestJob?.id]);
-  const canAdvance =
-    walking &&
-    follow &&
-    !active &&
-    !requested &&
-    stage < 5 &&
-    complete[stage - 1] &&
-    ready[stage];
-  useEffect(() => {
-    if (!canAdvance) return;
-    // A completed, visible stage gets its own full six-second hold.
-    // Unrelated polling updates must not restart that hold.
-    const timer = setTimeout(() => setStage(stage + 1), 6000);
-    return () => clearTimeout(timer);
-  }, [stage, canAdvance]);
-  useLayoutEffect(() => {
-    // Keep completed panels mounted so the next stage stays below them.
-    // Scroll after the new panel has expanded and its layout is committed.
-    const frame = requestAnimationFrame(() => {
-      const heading = panels.current[
-        stage - 1
-      ]?.querySelector<HTMLButtonElement>(".workflow-stop-heading");
-      heading?.focus({ preventScroll: true });
-      heading?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [stage]);
   useEffect(() => {
     if (stage > 1 && !ready[stage - 1]) setStage(1);
   }, [stage, searchDone, threads.length, briefed, deliveries.length]);
@@ -1616,23 +1714,96 @@ function Operations({
     if (kind === "hospital") setFacility(value);
     else setSid(value);
     setStage(1);
-    setWalking(false);
+
     setRequested(false);
   }
+  const stageGuidance = !products.length
+    ? {
+        title: "Start with your hospital CSV",
+        text: "Upload a CSV in the hospital dashboard to connect inventory and consumption history. The workflow uses that hospital’s actual imported records.",
+      }
+    : active || requested
+      ? {
+          title: "The analysis is running",
+          text: "The backend is checking the latest inputs and calculating the forecast. Visible numbers remain the last completed result until this run finishes.",
+        }
+      : [
+          {
+            title: "Read the forecast from top to bottom",
+            text: `${NAME[facility]} · ${supply?.name || sid}. First explore the output cards, then the calculation, refresh comparison and daily graph. ${gate?.reason || "The forecast determines whether a transfer search is needed."}`,
+          },
+          {
+            title: "Finding a safe hospital match",
+            text: offers.length
+              ? `The search uses the hospitals’ recorded locations and the demo travel-time matrix to compare reachable partners. It checks usable batches, expiry and forecast demand, protects the donor’s own demand and reserve, and excludes hospitals restricted by an active outbreak. ${offers.map((offer) => `${NAME[gate?.kind === "recipient_search" ? offer.recipient : offer.donor]} has a proposal for ${fmt(offer.quantity)} ${supply?.unit || "units"}, with ${offer.travel_hours} hours of simulated travel.`).join(" ")} The nearest feasible partner is preferred; distance alone does not qualify a hospital. Select a result for its specific reason.`
+              : `The search compares hospital locations and simulated travel times, then checks forecast demand, available stock, expiry and outbreak restrictions. ${searchDone ? "No safe match was found for this product; being nearby does not mean a hospital can safely donate." : gate?.reason || "The donor search has not completed yet."} Select a hospital result to understand its eligibility.`,
+          },
+          {
+            title: "The hospital agents are negotiating",
+            text: "These are recorded messages for the selected product. Offers stay within the allocation engine’s safe limits. Select a message to review what that hospital proposed and why.",
+          },
+          {
+            title: "Both hospitals review the terms",
+            text: "Each hospital administrator must approve the same version. A counteroffer changes the terms and requires fresh approval. These panels show the live approval status; opening a hospital dashboard does not approve anything.",
+          },
+          {
+            title: "Follow the delivery and stock update",
+            text: "After both approvals, stock is reserved. Delivery progresses through pickup and transit, then receipt updates the receiving hospital’s inventory. The recorded status shows what has actually happened.",
+          },
+        ][visibleStage - 1];
   return (
     <div className="guided-workflow">
-      {pipelineTarget && createPortal(
-        <nav className="backend-pipeline" aria-label="Backend workflow pipeline">
-          {titles.map((title, index) => (
-            <button key={index} disabled={!products.length || !ready[index]}
-              aria-current={stage === index + 1 ? "step" : undefined}
-              className={(complete[index] ? "is-complete " : "") + (stage === index + 1 ? "is-active" : "")}
-              onClick={() => select(index + 1, true)}>
-              <span className="pipeline-node">{complete[index] ? <CheckCircle2 size={16} /> : String(index + 1).padStart(2, "0")}</span>
-              <span><strong>{title}</strong><small>{!products.length ? "Awaiting CSV" : index === 0 && (active || requested) ? "Calculating" : complete[index] ? "Complete" : !ready[index] ? "Waiting" : index === 3 ? "Awaiting approval" : "Ready"}</small></span>
-            </button>
-          ))}
-        </nav>, pipelineTarget)}
+      <Suspense fallback={null}>
+        <CareMascot
+          context="dashboard"
+          guidance={interaction || stageGuidance}
+        />
+      </Suspense>
+      {pipelineTarget &&
+        createPortal(
+          <nav
+            className="backend-pipeline"
+            aria-label="Backend workflow pipeline"
+          >
+            {titles.map((title, index) => (
+              <button
+                key={index}
+                disabled={!products.length || !ready[index]}
+                aria-current={stage === index + 1 ? "step" : undefined}
+                className={
+                  (complete[index] ? "is-complete " : "") +
+                  (stage === index + 1 ? "is-active" : "")
+                }
+                onClick={() => select(index + 1)}
+              >
+                <span className="pipeline-node">
+                  {complete[index] ? (
+                    <CheckCircle2 size={16} />
+                  ) : (
+                    String(index + 1).padStart(2, "0")
+                  )}
+                </span>
+                <span>
+                  <strong>{title}</strong>
+                  <small>
+                    {!products.length
+                      ? "Awaiting CSV"
+                      : index === 0 && (active || requested)
+                        ? "Calculating"
+                        : complete[index]
+                          ? "Complete"
+                          : !ready[index]
+                            ? "Waiting"
+                            : index === 3
+                              ? "Awaiting approval"
+                              : "Ready"}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </nav>,
+          pipelineTarget,
+        )}
       <div className="workflow-controls">
         <label>
           Hospital
@@ -1672,7 +1843,7 @@ function Operations({
             priorRun.current = network.demo.latest_run;
             priorJob.current = latestJob?.id;
             setStage(1);
-            setWalking(false);
+
             setRequested(true);
             if (!(await act("/analysis-runs", { force: true })))
               setRequested(false);
@@ -1704,21 +1875,9 @@ function Operations({
         <>
           <div className="workflow-caption">
             <p>
-              Edit inventory in the hospital dashboard, then refresh here to
-              follow the result. Each completed stage stays visible for six
-              seconds before the next available stage opens.
+              Available stages stay expanded. Scroll through the workflow at your
+              own pace, or select a stage from the pipeline.
             </p>
-            <label>
-              <input
-                type="checkbox"
-                checked={follow}
-                onChange={(e) => {
-                  setFollow(e.target.checked);
-                  if (e.target.checked) setWalking(true);
-                }}
-              />{" "}
-              Follow stages automatically
-            </label>
           </div>
           {failed && (
             <p role="alert" className="notice notice-danger">
@@ -1739,9 +1898,9 @@ function Operations({
                 <button
                   className="workflow-stop-heading"
                   disabled={!ready[index]}
-                  aria-expanded={index + 1 <= stage && ready[index]}
+                  aria-expanded={true}
                   aria-current={stage === index + 1 ? "step" : undefined}
-                  onClick={() => select(index + 1, true)}
+                  onClick={() => select(index + 1)}
                 >
                   <span className="stage-number">{index + 1}</span>
                   <strong>{title}</strong>
@@ -1763,7 +1922,7 @@ function Operations({
                             : "In progress"}
                   </small>
                 </button>
-                {index + 1 <= stage && ready[index] && (
+                {ready[index] ? (
                   <div className="workflow-stop-body">
                     {index === 0 && (
                       <>
@@ -1772,19 +1931,22 @@ function Operations({
                           risk={risk}
                           supply={supply}
                           updating={!!active || requested}
+                          workflow
+                          onExplain={setInteraction}
                         />
                         <p className="stage-result">
                           {active || requested
                             ? "Running the forecast and checking current batches, expiry and arrivals…"
                             : gate?.kind === "none"
-                              ? gate.reason || "No transfer needed. This workflow stops here."
+                              ? gate.reason ||
+                                "No transfer needed. This workflow stops here."
                               : gate?.reason ||
                                 "Upload the hospital CSV to begin."}
                         </p>
                         {searchDone && !active && !requested && (
                           <Button
                             onClick={() => {
-                              setWalking(true);
+
                               select(2);
                             }}
                           >
@@ -1839,7 +2001,39 @@ function Operations({
                                   ) <= i.radius_km,
                               );
                               return (
-                                <article key={h.id}>
+                                <article
+                                  key={h.id}
+                                  tabIndex={0}
+                                  role="button"
+                                  onClick={() =>
+                                    setInteraction({
+                                      title: h.name,
+                                      text: matches.length
+                                        ? matches
+                                            .map(
+                                              (n) =>
+                                                `${fmt(n.quantity)} ${supply?.unit} proposed. ${n.reason}`,
+                                            )
+                                            .join(" ")
+                                        : reasons.length
+                                          ? reasons
+                                              .map((r) => r.reason)
+                                              .join(" ")
+                                          : inZone
+                                            ? "This hospital is in the active planning zone and cannot donate automatically."
+                                            : "No feasible allocation was selected for this hospital with the current forecast, stock and expiry constraints.",
+                                    })
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (
+                                      event.key === "Enter" ||
+                                      event.key === " "
+                                    ) {
+                                      event.preventDefault();
+                                      event.currentTarget.click();
+                                    }
+                                  }}
+                                >
                                   <div>
                                     <strong>{h.name}</strong>
                                     <p>
@@ -1880,7 +2074,7 @@ function Operations({
                         {offers.length ? (
                           <Button
                             onClick={() => {
-                              setWalking(true);
+
                               select(3);
                             }}
                           >
@@ -1917,6 +2111,23 @@ function Operations({
                             {n.messages.map((m, i) => (
                               <div
                                 key={i}
+                                tabIndex={0}
+                                role="button"
+                                onClick={() =>
+                                  setInteraction({
+                                    title: `${NAME[m.actor] || m.actor} · ${m.type}`,
+                                    text: m.text,
+                                  })
+                                }
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === "Enter" ||
+                                    event.key === " "
+                                  ) {
+                                    event.preventDefault();
+                                    event.currentTarget.click();
+                                  }
+                                }}
                                 className={
                                   "agent-bubble " +
                                   (m.actor === n.donor ? "donor-message" : "")
@@ -1943,7 +2154,7 @@ function Operations({
                         ) : (
                           <Button
                             onClick={() => {
-                              setWalking(true);
+
                               select(4);
                             }}
                           >
@@ -1972,7 +2183,17 @@ function Operations({
                             <p>{n.reason}</p>
                             <div className="approval-pair">
                               {[n.donor, n.recipient].map((id) => (
-                                <div key={id}>
+                                <div
+                                  key={id}
+                                  onClick={() =>
+                                    setInteraction({
+                                      title: NAME[id],
+                                      text: n.approvals.includes(id)
+                                        ? `This hospital approved version ${n.version}. Both hospitals must approve identical terms before stock is reserved.`
+                                        : `This hospital has not approved version ${n.version}. Open its dashboard to review the agreement.`,
+                                    })
+                                  }
+                                >
                                   <strong>{NAME[id]}</strong>
                                   <Badge
                                     tone={
@@ -2016,6 +2237,10 @@ function Operations({
                       />
                     )}
                   </div>
+                ) : (
+                  <div className="workflow-stop-body">
+                    <p>Waiting for the preceding workflow stages. This stage will update when its results are ready.</p>
+                  </div>
                 )}
               </section>
             ))}
@@ -2035,7 +2260,7 @@ function Operations({
           disabled={busy || !!active}
           onClick={async () => {
             if (!(await act("/demo/finish"))) return;
-            setWalking(false);
+
             setRequested(false);
             setStage(1);
             setFacility("A");

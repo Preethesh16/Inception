@@ -348,3 +348,99 @@ def test_onboarding_and_refresh_have_no_approvals_until_demo_action(store, monke
     assert response.status_code == 201
     run_job(store, response.json()["job"])
     assert not any(n["status"] == "Awaiting approvals" for n in store.read()["negotiations"].values())
+
+
+def test_scenario_opening_has_no_shortages_and_real_ors_donor_capacity(store):
+    from inception.trio import import_bundle
+    from inception.engine import allocate
+
+    seed_trio(store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+    run_job(store, enqueue(store))
+    # Check the actual rules, not the onboarding workflow's suppression of searches.
+    result = allocate(store.read())
+    assert len(result["risks"]) == 9
+    assert all(r["unmet"] == 0 and r["expiry_units"] == 0
+               and not r["risk_review_required"] for r in result["risks"].values())
+    assert all(result["risks"][f"A:{sid}"]["surplus_candidate_units"] == 0 for sid in ("ORS", "SAL", "MSK"))
+    assert all(result["risks"][f"{fid}:ORS"]["surplus_candidate_units"] >= 1000 for fid in ("B", "D"))
+    assert not result["moves"]  # No recipient needs stock at startup.
+
+
+def test_general_reset_restores_entire_three_hospital_baseline(store, monkeypatch):
+    import copy
+    from inception.trio import import_bundle
+
+    seed_trio(store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+    original = copy.deepcopy(store.read())
+    old_job = enqueue(store)
+    with store.transaction() as s:
+        for batch in s["batches"].values():
+            batch.update(quantity=1, reserved=1, quarantined=True, expires_at="2026-10-06T00:00:00Z")
+        for delivery in s["replenishments"].values():
+            delivery.update(quantity=99999, status="received")
+        s["settings"]["demo"]["day"] = 240
+        s["settings"]["demo"]["as_of"] = "2026-10-08T00:00:00+00:00"
+        s["settings"]["sessions"] = {"old-login": {"facility_id": "A"}}
+        for collection in ("reports", "incidents", "negotiations", "transfers", "forecasts", "runs", "allocations"):
+            s[collection]["changed"] = {"id": "changed"}
+    monkeypatch.setattr(api, "store", store)
+    response = TestClient(api.app).post("/demo/reset", headers={"X-Demo-Session": "demo-judge"})
+    assert response.status_code == 200
+    current = store.read()
+    for collection in ("facilities", "supplies", "batches", "replenishments"):
+        assert current[collection] == original[collection]
+    assert current["settings"]["demo"]["as_of"] == original["settings"]["demo"]["as_of"]
+    assert current["settings"]["demo"]["day"] == 237
+    assert not current["settings"].get("sessions")
+    for collection in ("reports", "incidents", "negotiations", "transfers", "forecasts", "runs", "allocations"):
+        assert not current[collection]
+    run_job(store, old_job)
+    assert store.read()["batches"] == original["batches"]
+    assert reconciliation(store.read())["balanced"]
+
+
+def test_presenter_stock_edits_and_report_rerouting(store):
+    import copy
+    from inception.trio import import_bundle
+    from inception.engine import allocate, detect
+    from inception.forecast import history_at
+
+    seed_trio(store)
+    with store.transaction() as s:
+        import_bundle(s, "A", (ROOT / "demo-data/three-hospital/A-hospital.csv").read_bytes())
+    run_job(store, enqueue(store))
+    base = store.read()
+    base["settings"]["demo"]["workflow_started"] = True
+    shortage = copy.deepcopy(base)
+    for bid in ("A-ORS-01", "A-ORS-02"):
+        shortage["batches"][bid]["quantity"] = 50
+    moves = allocate(shortage)["moves"]
+    assert moves and all(m["donor"] == "B" and m["recipient"] == "A" for m in moves)
+
+    surplus = copy.deepcopy(base)
+    surplus["batches"]["A-ORS-01"]["quantity"] = 3000
+    moves = allocate(surplus)["moves"]
+    assert any(m["donor"] == "A" and m["purpose"] == "expiry_rescue" for m in moves)
+
+    for fid in ("A", "B", "D"):
+        shortage["reports"][fid] = {
+            "id": fid, "facility_id": fid, "supply_ids": ["ORS"], "status": "active",
+            "onset_at": "2026-10-05T00:00:00+00:00", "expires_at": "2026-10-08T00:00:00+00:00",
+        }
+        shortage["incidents"] = {i["id"]: i for i in detect(
+            history_at(shortage["settings"]["demo"]["as_of"], state=shortage), shortage)}
+        moves = allocate(shortage)["moves"]
+        if fid != "D":
+            assert not in_zone(shortage, "D", "ORS")
+            assert moves and all(m["donor"] == "D" for m in moves)
+        else:
+            assert len(shortage["incidents"]) == 1
+            zone = next(iter(shortage["incidents"].values()))
+            assert set(zone["facilities"]) == {"A", "B", "D"}
+            assert zone["radius_km"] > 20
+            assert in_zone(shortage, "D", "ORS")
+            assert not moves  # Both available donor locations are now excluded.

@@ -162,7 +162,7 @@ def expiry_matches(state, risks, decisions, existing):
                         )
                         or not recipient_safe(work, recipient, sid, [incoming])
                         # Long-life transfers need demonstrated shortage benefit; do not just relocate surplus.
-                        or (not expiry_rescue and after["unmet"] >= before["unmet"] - 1e-6)
+                        or (not expiry_rescue and before["unmet"] - after["unmet"] < pack - 1e-6)
                     ):
                         continue
                     move = {

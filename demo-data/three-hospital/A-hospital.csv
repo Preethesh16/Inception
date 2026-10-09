@@ -3,12 +3,12 @@ profile,A,Kaveri General Hospital,Nazarbad,12.305,76.67,240,0.34,12,A,,,,,,,,,,,
 supply,,Oral rehydration salts,,,,,,,A,ORS,sachet,10,ambient,,,,,,,,,
 supply,,IV saline 500 ml,,,,,,,A,SAL,bag,5,ambient,,,,,,,,,
 supply,,Surgical masks,,,,,,,A,MSK,mask,50,dry,,,,,,,,,
-batch,A-ORS-01,,,,,,,,A,ORS,sachet,,ambient,LOT-A-ORS-01,120,2026-10-17T00:00:00+00:00,,,,,,
-batch,A-ORS-02,,,,,,,,A,ORS,sachet,,ambient,LOT-A-ORS-02,340,2026-12-19T00:00:00+00:00,,,,,,
-batch,A-SAL-01,,,,,,,,A,SAL,bag,,ambient,LOT-A-SAL-01,66,2026-10-17T00:00:00+00:00,,,,,,
-batch,A-SAL-02,,,,,,,,A,SAL,bag,,ambient,LOT-A-SAL-02,418,2026-12-19T00:00:00+00:00,,,,,,
-batch,A-MSK-01,,,,,,,,A,MSK,mask,,dry,LOT-A-MSK-01,480,2026-10-17T00:00:00+00:00,,,,,,
-batch,A-MSK-02,,,,,,,,A,MSK,mask,,dry,LOT-A-MSK-02,3040,2026-12-19T00:00:00+00:00,,,,,,
+batch,A-ORS-01,,,,,,,,A,ORS,sachet,,ambient,LOT-A-ORS-01,100,2026-10-17T00:00:00+00:00,,,,,,
+batch,A-ORS-02,,,,,,,,A,ORS,sachet,,ambient,LOT-A-ORS-02,2440,2026-12-19T00:00:00+00:00,,,,,,
+batch,A-SAL-01,,,,,,,,A,SAL,bag,,ambient,LOT-A-SAL-01,60,2026-10-17T00:00:00+00:00,,,,,,
+batch,A-SAL-02,,,,,,,,A,SAL,bag,,ambient,LOT-A-SAL-02,810,2026-12-19T00:00:00+00:00,,,,,,
+batch,A-MSK-01,,,,,,,,A,MSK,mask,,dry,LOT-A-MSK-01,450,2026-10-17T00:00:00+00:00,,,,,,
+batch,A-MSK-02,,,,,,,,A,MSK,mask,,dry,LOT-A-MSK-02,5050,2026-12-19T00:00:00+00:00,,,,,,
 consumption,,,,,,252,0.34,,A,ORS,,,,,30,,2026-02-10,1,0,0,,
 consumption,,,,,,247,0.34,,A,ORS,,,,,35,,2026-02-11,1,0,0,,
 consumption,,,,,,240,0.34,,A,ORS,,,,,32,,2026-02-12,1,0,0,,
@@ -720,6 +720,6 @@ consumption,,,,,,240,0.34,,A,MSK,,,,,183,,2026-10-01,1,0,0,,
 consumption,,,,,,261,0.34,,A,MSK,,,,,204,,2026-10-02,1,0,0,,
 consumption,,,,,,211,0.34,,A,MSK,,,,,140,,2026-10-03,1,0,0,,
 consumption,,,,,,196,0.34,,A,MSK,,,,,150,,2026-10-04,1,0,0,,
-replenishment,PO-A-ORS,,,,,,,,A,ORS,sachet,,ambient,,840,2027-01-13T00:00:00+00:00,,,,,2026-10-17T00:00:00+00:00,1
-replenishment,PO-A-SAL,,,,,,,,A,SAL,bag,,ambient,,528,2027-01-13T00:00:00+00:00,,,,,2026-10-17T00:00:00+00:00,1
-replenishment,PO-A-MSK,,,,,,,,A,MSK,mask,,dry,,3840,2027-01-13T00:00:00+00:00,,,,,2026-10-17T00:00:00+00:00,1
+replenishment,PO-A-ORS,,,,,,,,A,ORS,sachet,,ambient,,840,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1
+replenishment,PO-A-SAL,,,,,,,,A,SAL,bag,,ambient,,528,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1
+replenishment,PO-A-MSK,,,,,,,,A,MSK,mask,,dry,,3840,2027-01-13T00:00:00+00:00,,,,,2026-11-03T00:00:00+00:00,1

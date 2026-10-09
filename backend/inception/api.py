@@ -495,6 +495,8 @@ async def stream(request: Request, after: int = 0, who=Depends(actor)):
 @app.post("/demo/reset")
 def reset(who=Depends(judge)):
     # Old queued work is generation-checked before it can commit.
+    if store.read()["settings"]["demo"].get("mode") == "three-hospital":
+        return finish_demo(who)
     seed(store)
     return {"job": enqueue(store)}
 
@@ -878,3 +880,68 @@ def edit_batch(batch_id: str, body: BatchEdit, who=Depends(actor)):
             [who],
         )
     return {"status": "updated", "job": enqueue(store)}
+
+
+from .translation import TranslationRequest, translate
+
+@app.post("/ui/translate")
+def translate_ui(body: TranslationRequest):
+    # Public login/landing copy also uses this endpoint; no hospital records are read.
+    try:
+        return {"language": body.language, "translations": translate(body.language, body.texts)}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception:
+        raise HTTPException(503, "Translation is unavailable. The original English text is shown.")
+
+
+@app.get("/inventory/insights")
+def inventory_insights(supply_id: str, horizon: int = Query(default=28),
+                       scenario: Literal['planning', 'stress'] = 'planning', who=Depends(actor)):
+    from .insights import usage_plan
+    state = store.read()
+    require(horizon in (7, 14, 28), 'Choose 7, 14 or 28 days', 422)
+    require(who in state['facilities'], 'Select a hospital dashboard', 403)
+    require(supply_id in state['supplies'], 'Unknown product', 404)
+    return usage_plan(state, who, supply_id, horizon, scenario)
+
+
+class ManualStockRequest(BaseModel):
+    donor: str
+    supply_id: str
+    quantity: int = Field(gt=0, le=1000000)
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class ManualStockResponse(BaseModel):
+    version: int
+    action: Literal["offer", "accept", "decline", "cancel"]
+    quantity: int = Field(default=0, ge=0, le=1000000)
+    message: str = Field(default="", max_length=2000)
+    override_reason: str = Field(default="", max_length=2000)
+
+
+@app.get("/stock-requests")
+def list_stock_requests(who=Depends(actor)):
+    from .stock_requests import view
+    s = store.read()
+    require(who in s["facilities"], "Hospital login required", 403)
+    return [view(s, r) for r in s["stock_requests"].values() if who in (r["donor"], r["recipient"])]
+
+
+@app.post("/stock-requests", status_code=201)
+def create_stock_request(body: ManualStockRequest, who=Depends(actor)):
+    from .stock_requests import create
+    with store.transaction() as s:
+        result = create(s, who, body)
+    return result
+
+
+@app.post("/stock-requests/{rid}/respond")
+def respond_stock_request(rid: str, body: ManualStockResponse, who=Depends(actor)):
+    from .stock_requests import respond
+    with store.transaction() as s:
+        result = respond(s, who, rid, body)
+    if body.action == "accept":
+        enqueue(store)
+    return result

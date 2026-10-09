@@ -14,6 +14,7 @@ COLLECTIONS = (
     "movements",
     "replenishments",
     "reports",
+    "stock_requests",
     "forecasts",
     "negotiations",
     "transfers",

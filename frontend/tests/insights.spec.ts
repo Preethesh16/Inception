@@ -1,0 +1,26 @@
+import {expect} from '@playwright/test';
+import {test} from './fixtures';
+import {readFileSync} from 'node:fs';
+test('insights shows a FEFO plan and explains lot and day selections',async({page,request})=>{
+  test.setTimeout(60000);
+  const judge={'X-Demo-Session':'demo-judge'}, hospital={'X-Demo-Session':'demo-A'};
+  await request.post('/api/demo/onboarding-reset',{headers:judge});
+  await request.post('/api/onboarding/csv',{headers:hospital,multipart:{file:{name:'A.csv',mimeType:'text/csv',buffer:readFileSync('../demo-data/three-hospital/A-hospital.csv')}}});
+  await expect.poll(async()=>{const r=await request.get('/api/inventory/insights?supply_id=ORS&horizon=7',{headers:hospital});return r.ok()?(await r.json()).status:'error';},{timeout:30000}).toBe('ready');
+  await page.goto('/login');
+  await page.getByLabel('Email',{exact:true}).fill('admin@kaveri.demo');
+  await page.getByLabel('Password',{exact:true}).fill('Demo@2026');
+  await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.getByRole('button',{name:'Insights',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'When to use each lot'})).toBeVisible();
+  await page.getByLabel('Product',{exact:true}).selectOption('ORS');
+  await page.getByRole('button',{name:'Explain this lot'}).click();
+  await expect(page.locator('.mascot-intro h2')).toContainText('LOT-A-ORS-01');
+  await page.getByRole('slider',{name:'Usage plan day'}).fill('5');
+  await expect(page.locator('.mascot-intro h2')).toContainText('Usage plan');
+  await page.getByLabel('Planning window').selectOption('7');
+  await expect(page.getByRole('slider',{name:'Usage plan day'})).toHaveAttribute('max','7');
+  await page.getByLabel('Demand scenario').selectOption('stress');
+  await expect(page.locator('.lot-timeline-row')).toHaveCount(2);
+  await page.screenshot({path:'../artifacts/inventory-insights.png',fullPage:true});
+});

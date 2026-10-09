@@ -249,15 +249,24 @@ def seed_trio(store, directory=DATA):
         s["facilities"]["B"].update(lat=12.300, lng=76.679)
         for name in ("batches", "movements", "replenishments"):
             s[name] = {k: v for k, v in s[name].items() if v["facility_id"] in IDS}
+        # Reproducible scenario-ready inventory, checked against both forecast
+        # modes at day 237. A starts balanced; B and D retain real ORS donor
+        # headroom so lowering A's stock can produce a safe transfer.
+        opening = {
+            "A": {"ORS": (100, 2540), "SAL": (60, 870), "MSK": (450, 5500)},
+            "B": {"ORS": (90, 3600), "SAL": (40, 640), "MSK": (400, 4850)},
+            "D": {"ORS": (60, 2500), "SAL": (35, 560), "MSK": (300, 3900)},
+        }
+        start = dt(s["settings"]["demo"]["as_of"])
         for b in s["batches"].values():
-            if b["facility_id"] == "B":
-                quantity = (
-                    250
-                    if b["id"].endswith("01")
-                    else (1750 if b["supply_id"] == "ORS" else b["quantity"] * 2)
-                )
-                b["quantity"] = quantity
-                s["movements"]["OPEN-" + b["id"]]["quantity"] = quantity
+            near, total = opening[b["facility_id"]][b["supply_id"]]
+            b["quantity"] = near if b["id"].endswith("01") else total - near
+            b["expires_at"] = (start + timedelta(days=12 if b["id"].endswith("01") else 75)).isoformat()
+            movement = s["movements"]["OPEN-" + b["id"]]
+            movement["quantity"] = b["quantity"]
+        # The next regular shipment is outside the opening planning window.
+        for arrival in s["replenishments"].values():
+            arrival["arrives_at"] = (start + timedelta(days=29)).isoformat()
         s["settings"]["onboarding"] = {"hospitals": {}}
         out = ROOT / "demo-data" / "three-hospital"
         out.mkdir(parents=True, exist_ok=True)

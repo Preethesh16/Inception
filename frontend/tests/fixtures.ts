@@ -20,6 +20,8 @@ export const test = base.extend({
     await isolated.dispose();
   },
   context: async ({ context }, use) => {
+    // Feature tests use English; language-picker tests cover first-entry selection separately.
+    await context.addInitScript(() => localStorage.setItem("inception-language", "en"));
     // Acceptance tests use the geographic fallback, not public tile bandwidth.
     await context.route("https://tile.openstreetmap.org/**", (route) =>
       route.abort(),

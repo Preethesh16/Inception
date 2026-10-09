@@ -83,3 +83,24 @@ def test_worker_records_search_gates_per_hospital(store):
     assert len(events) == len(store.read()["forecasts"])
     assert all(e["facilities"] == [e["details"]["facility_id"]] for e in events)
     assert all((e["type"] == "SEARCH_SKIPPED") == (e["details"]["kind"] == "none") for e in events)
+
+
+def test_surplus_pass_cannot_double_allocate_last_partial_pack(state):
+    from inception.transactions import approve
+    s = steady(state)
+    s["batches"]["A-ORS-01"]["quantity"] = 0
+    s["batches"]["A-ORS-02"]["quantity"] = 100
+    s["forecasts"]["A:ORS"]["planning"] = [10.2] * 28  # 185.6 unmet; only 180 in whole packs.
+    result = allocate(s)
+    moves = [m for m in result["moves"] if m["recipient"] == "A" and m["supply_id"] == "ORS"]
+    assert sum(m["quantity"] for m in moves) == 180
+    # Proposals must remain approvable in sequence after earlier reservations.
+    from inception.store import now
+    for i, move in enumerate(moves):
+        nid = f"partial-pack-{i}"
+        n = {**move, "id": nid, "run_id": s["settings"]["demo"]["latest_run"],
+             "version": 1, "status": "Awaiting approvals", "approvals": [], "created_at": now()}
+        s["negotiations"][nid] = n
+        approve(s, nid, n["recipient"], 1)
+        approve(s, nid, n["donor"], 1)
+        assert n["status"] == "Reserved"

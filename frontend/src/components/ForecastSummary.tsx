@@ -14,11 +14,15 @@ export function ForecastSummary({
   risk: r,
   supply,
   updating = false,
+  workflow = false,
+  onExplain,
 }: {
   forecast?: Forecast;
   risk?: Risk;
   supply?: Supply;
   updating?: boolean;
+  workflow?: boolean;
+  onExplain?: (guidance: { title: string; text: string }) => void;
 }) {
   const [previous, setPrevious] = useState<Checkpoint | null>(null);
   const current = useRef("");
@@ -71,7 +75,9 @@ export function ForecastSummary({
   const history7 = f.history.slice(-7).reduce((a, b) => a + b.quantity, 0);
   return (
     <section
-      className="trio-card forecast-summary"
+      className={
+        "trio-card forecast-summary" + (workflow ? " workflow-forecast" : "")
+      }
       aria-label={(supply?.name || f.supply_id) + " forecast"}
     >
       <div className="forecast-title">
@@ -98,6 +104,80 @@ export function ForecastSummary({
                 ? "Uncertain demand: review stock"
                 : "Central forecast covered for 28 days"}
         </Badge>
+      </div>
+      {workflow && (
+        <h3 className="forecast-section-label">01 / Model outputs</h3>
+      )}
+      <div className="simple-numbers">
+        <div
+          role={onExplain ? "button" : undefined}
+          tabIndex={onExplain ? 0 : undefined}
+          onClick={() =>
+            onExplain?.({
+              title: "Expected use",
+              text: `${fmt(r.demand_7)} ${unit} are expected over seven days. This is planning demand, including supported incident adjustments; it is not the quantity currently in stock.`,
+            })
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onExplain?.({
+                title: "Expected use",
+                text: `${fmt(r.demand_7)} ${unit} are expected over seven days. This is planning demand, including supported incident adjustments; it is not the quantity currently in stock.`,
+              });
+            }
+          }}
+        >
+          <small>Expected use · next 7 days</small>
+          <strong>{fmt(r.demand_7)}</strong>
+          <span>{unit}s</span>
+        </div>
+        <div
+          role={onExplain ? "button" : undefined}
+          tabIndex={onExplain ? 0 : undefined}
+          onClick={() =>
+            onExplain?.({
+              title: "Available inventory",
+              text: `${fmt(r.stock)} ${unit} are available excluding reservations. Coverage also depends on when batches expire, expected consumption and confirmed arrivals.`,
+            })
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onExplain?.({
+                title: "Available inventory",
+                text: `${fmt(r.stock)} ${unit} are available excluding reservations. Coverage also depends on when batches expire, expected consumption and confirmed arrivals.`,
+              });
+            }
+          }}
+        >
+          <small>Usable stock now</small>
+          <strong>{fmt(r.stock)}</strong>
+          <span>{unit}s, excluding reservations</span>
+        </div>
+        <div
+          role={onExplain ? "button" : undefined}
+          tabIndex={onExplain ? 0 : undefined}
+          onClick={() =>
+            onExplain?.({
+              title: "Potential expiry waste",
+              text: `${fmt(r.expiry_units)} ${unit} are projected to expire unused over 28 days. This is based on consumption and expiry dates, not simply the age of the stock.`,
+            })
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onExplain?.({
+                title: "Potential expiry waste",
+                text: `${fmt(r.expiry_units)} ${unit} are projected to expire unused over 28 days. This is based on consumption and expiry dates, not simply the age of the stock.`,
+              });
+            }
+          }}
+        >
+          <small>Projected to expire unused</small>
+          <strong>{fmt(r.expiry_units)}</strong>
+          <span>{unit}s · next 28 days</span>
+        </div>
       </div>
       <p className="forecast-answer">
         You are expected to use{" "}
@@ -152,23 +232,6 @@ export function ForecastSummary({
           </details>
         </div>
       )}
-      <div className="simple-numbers">
-        <div>
-          <small>Expected use · next 7 days</small>
-          <strong>{fmt(r.demand_7)}</strong>
-          <span>{unit}s</span>
-        </div>
-        <div>
-          <small>Usable stock now</small>
-          <strong>{fmt(r.stock)}</strong>
-          <span>{unit}s, excluding reservations</span>
-        </div>
-        <div>
-          <small>Projected to expire unused</small>
-          <strong>{fmt(r.expiry_units)}</strong>
-          <span>{unit}s · next 28 days</span>
-        </div>
-      </div>
       <div className="prediction-source">
         <strong>
           {updating
@@ -190,23 +253,22 @@ export function ForecastSummary({
           not advance automatically.
         </span>
       </div>
-      {previous && !updating && (
-        <div className="forecast-change" role="status">
-          <strong>What changed since the last result shown here?</strong>
-          <p>
-            7-day demand: {fmt(previous.need)} → {fmt(r.demand_7)} {unit}s.
-            Usable stock: {fmt(previous.stock)} → {fmt(r.stock)}. Stock-out:{" "}
-            {days(previous.coverage)} → {days(r.stockout_days)}.
-          </p>
-          <small>
-            {previous.need === r.demand_7
-              ? "The demand prediction stayed the same. Inventory or expiry edits affect available stock and coverage, not the historical consumption pattern."
-              : "Expected use changed. See the model prediction and incident adjustment below."}
-          </small>
-        </div>
-      )}
-      <details className="forecast-explanation">
-        <summary>How was this calculated?</summary>
+      <details
+        className="forecast-explanation"
+        open={workflow || undefined}
+        onToggle={(event) => {
+          if (event.currentTarget.open)
+            onExplain?.({
+              title: "How the forecast becomes a decision",
+              text: "The model predicts demand from recorded consumption. The engine then applies supported incident needs and simulates batches, expiry and confirmed arrivals to estimate shortages.",
+            });
+        }}
+      >
+        <summary>
+          {workflow
+            ? "02 / Why and how this result was calculated"
+            : "How was this calculated?"}
+        </summary>
         <ol>
           <li>
             <strong>Read this hospital’s consumption history.</strong>
@@ -260,15 +322,39 @@ export function ForecastSummary({
           represents daily model uncertainty.
         </p>
       </details>
+      {previous && !updating && (
+        <div className="forecast-change" role="status">
+          <strong>03 / Changes since last refresh</strong>
+          <p>
+            7-day demand: {fmt(previous.need)} → {fmt(r.demand_7)} {unit}s.
+            Usable stock: {fmt(previous.stock)} → {fmt(r.stock)}. Stock-out:{" "}
+            {days(previous.coverage)} → {days(r.stockout_days)}.
+          </p>
+          <small>
+            {previous.need === r.demand_7
+              ? "The demand prediction stayed the same. Inventory or expiry edits affect available stock and coverage, not the historical consumption pattern."
+              : "Expected use changed. See the model prediction and incident adjustment below."}
+          </small>
+        </div>
+      )}
+      {!previous && !updating && workflow && (
+        <div className="forecast-change">
+          <strong>03 / Changes since last refresh</strong>
+          <p>
+            This is the first result shown in this browser session. Refresh
+            comparisons will appear after another completed analysis.
+          </p>
+        </div>
+      )}
       <div className="forecast-chart-heading">
-        <h3>Past consumption → expected daily use</h3>
+        <h3>04 / Past consumption → expected daily use</h3>
         <div className="plain-chart-legend">
           <span>● Recorded use</span>
           <span>┄ Model prediction</span>
           <span>● Planning demand</span>
         </div>
       </div>
-      <ForecastChart forecast={f} />
+      <ForecastChart forecast={f} onExplain={onExplain} />
       <details>
         <summary>Inspect daily quantities and stock calculations</summary>
         <div className="table-scroll">

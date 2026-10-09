@@ -246,12 +246,13 @@ def verify(state, n, reserved=False):
             result["waste"] <= recipient_before["waste"] + 1e-6,
             "Transfer would shift expiry waste to the recipient",
         )
+    manual_exception = n.get("purpose") == "manual_request" and bool(n.get("manual_override_reason"))
     require(
-        all(result["consumed"].get(a["id"], 0) >= a["quantity"] - 1e-6 for a in incoming),
+        manual_exception or all(result["consumed"].get(a["id"], 0) >= a["quantity"] - 1e-6 for a in incoming),
         "Recipient cannot consume the offered batch before expiry",
     )
     require(
-        recipient_safe(working, n["recipient"], n["supply_id"], incoming, arrivals),
+        manual_exception or recipient_safe(working, n["recipient"], n["supply_id"], incoming, arrivals),
         "Transfer would increase expected recipient expiry waste",
     )
     return eta.isoformat()

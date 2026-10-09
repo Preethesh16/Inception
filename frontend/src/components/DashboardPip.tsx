@@ -13,11 +13,17 @@ export default function DashboardPip({
   progress,
   usageGuidance,
   inventoryGuidance,
+  insightGuidance,
+  mapGuidance,
+  requestGuidance,
 }: {
   data: Snapshot;
   tab: string;
   progress: ImportProgress;
   usageGuidance?: { title: string; text: string };
+  requestGuidance?: {title:string;text:string};
+  mapGuidance?: { title: string; text: string };
+  insightGuidance?: { title: string; text: string };
   inventoryGuidance?: { title: string; text: string };
 }) {
   const [mapVisible, setMapVisible] = useState(false);
@@ -58,7 +64,8 @@ export default function DashboardPip({
                 `${f.name}: ${labels[data.network_status?.[f.id] || "unknown"]}.`,
             )
             .join(" ") +
-          " Colours show the highest forecast risk across each hospital’s supplies.",
+          " Colours show the highest forecast risk across each hospital’s supplies." +
+          (data.incidents.length ? ` There are ${data.incidents.length} active reported planning zones, shown with medicine-specific colours and dashed boundaries. Each medicine has its own coloured zone. Matching reports for the same medicine share one shaded zone; a Mandya report expands it across the distance to Mandya. Select a boundary or zone button and I’ll explain it.` : ""),
       };
     } else if (progress.error)
       guidance = {
@@ -89,8 +96,15 @@ export default function DashboardPip({
       text: `${pending} transfer proposal${pending === 1 ? " is" : "s are"} awaiting approvals. Review the quantities, batches, and negotiation evidence. Both hospitals must approve the same terms before stock can be reserved and delivered.`,
     };
   }
+  if (tab === "Onboarding" && mapVisible && mapGuidance) guidance = mapGuidance;
   if (tab === "Past usage" && usageGuidance) guidance = usageGuidance;
   if (tab === "Inventory management" && inventoryGuidance)
     guidance = inventoryGuidance;
+  if (tab === "Insights")
+    guidance = insightGuidance || {
+      title: "Plan which lot to use next",
+      text: "Choose a product and explore its daily usage plan. I’ll explain which batches are used first and why.",
+    };
+  if (tab === "Stock requests") guidance = requestGuidance || {title:"Ask your hospital network",text:"Request a product and quantity from a nearby hospital. Its team reviews suggested lots and replies. You then review demand and expiry before choosing whether to accept. People make the decisions."};
   return <CareMascot context="dashboard" guidance={guidance} />;
 }

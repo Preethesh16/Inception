@@ -6,7 +6,10 @@ const portArg = process.argv[process.argv.indexOf("--port") + 1] || "default";
 export default defineConfig({
   envDir: "..",
   cacheDir: `node_modules/.vite-${portArg}`,
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({ babel: { plugins: ["./localize-plugin.cjs"] } }),
+    tailwindcss(),
+  ],
   server: {
     host: "127.0.0.1",
     strictPort: true,

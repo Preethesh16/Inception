@@ -1,3 +1,4 @@
+import { zoneStyle, zoneName } from "../lib/planningZones";
 import { useState, useEffect } from "react";
 import {
   MapContainer,
@@ -108,21 +109,20 @@ export function NetworkMap({
               </Circle>
             ))}
         {data.incidents
-          .filter((i) => i.supply_id === supply)
           .map((i) => (
             <Circle
               key={i.id}
               center={[i.center.lat, i.center.lng]}
               radius={i.radius_km * 1000}
               pathOptions={{
-                color: "#dc2626",
-                weight: 1.5,
-                fillColor: "#ef4444",
-                fillOpacity: 0.1,
-                dashArray: "5 5",
+                color: zoneStyle(i.supply_id).color,
+                weight: i.supply_id === supply ? 2.5 : 1.5,
+                fillColor: zoneStyle(i.supply_id).color,
+                fillOpacity: 0.12,
+                dashArray: zoneStyle(i.supply_id).dash,
               }}
             >
-              <Tooltip>{i.status} · operational planning zone</Tooltip>
+              <Tooltip>{zoneName(i.supply_id)} · {i.status} · {i.radius_km} km</Tooltip>
             </Circle>
           ))}
         {heat &&
@@ -138,7 +138,7 @@ export function NetworkMap({
                     radius={r * 1000}
                     pathOptions={{
                       stroke: false,
-                      fillColor: "#f97316",
+                      fillColor: zoneStyle(i.supply_id).color,
                       fillOpacity: 0.13,
                     }}
                   />
@@ -222,6 +222,9 @@ export function NetworkMap({
         </div>
       )}
       <div className="map-legend">
+        {[...new Set(data.incidents.map(zone => zone.supply_id))].sort().map(id =>
+          <span key={id}><i className="dot" style={{ background: zoneStyle(id).color }} />{zoneName(id)} · planning zone</span>
+        )}
         <span>
           <i className="dot red" />
           At risk

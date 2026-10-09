@@ -196,13 +196,14 @@ def detect(history, state):
     for r in active_reports:
         for sid in r["supply_ids"]:
             if not any(r["facility_id"] in i["facilities"] and sid == i["supply_id"] for i in incidents):
+                # Matching reports within 48 hours form a continuous operational
+                # envelope, including distant reporting hospitals. This is not
+                # a claim of confirmed disease spread between locations.
                 peers = [
                     p
                     for p in active_reports
                     if sid in p["supply_ids"]
                     and abs((dt(p["onset_at"]) - dt(r["onset_at"])).total_seconds()) <= 48 * 3600
-                    and distance(state["facilities"][p["facility_id"]], state["facilities"][r["facility_id"]])
-                    <= POLICY["cluster_km"]
                 ]
                 ids = sorted({p["facility_id"] for p in peers})
                 center = {

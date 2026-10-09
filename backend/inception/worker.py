@@ -94,10 +94,24 @@ def run_job(store, job):
                 and previous_run.get("evaluation", {}).get("input_hash") == evaluation["input_hash"]
                 and "searches" in current["allocations"].get(previous_run.get("id"), {})
             )
+            if unchanged:
+                from .transactions import verify, DomainError
+                for old in current["negotiations"].values():
+                    if old["status"] == "Awaiting approvals":
+                        try:
+                            verify(current, old)
+                        except DomainError:
+                            unchanged = False
+                            break
             baseline_only = state["settings"]["demo"].get("mode") == "three-hospital" and not state["settings"]["demo"].get("workflow_started", False)
             for old in [] if unchanged and not baseline_only else current["negotiations"].values():
                 if old["status"] in ("Awaiting approvals", "Negotiating", "Proposed"):
                     old["status"] = "Needs re-evaluation"
+            from .negotiation import negotiate_offer
+
+            planned = copy.deepcopy(current)
+            pending_ids = []
+            feasible_moves = []
             for i, move in enumerate([] if unchanged else result["moves"]):
                 id = f"N-{run_id[:8]}-{i + 1}"
                 n = {
@@ -116,6 +130,24 @@ def run_job(store, job):
                     "messages": [],
                     "created_at": now(),
                 }
+                n, next_planned = negotiate_offer(current, planned, n, pending_ids)
+                if n is None:
+                    current["allocations"][run_id]["rejected"].append({
+                        "facility_id": move["donor"], "recipient_id": move["recipient"],
+                        "supply_id": move["supply_id"],
+                        "reason": "Joint negotiation found no feasible whole-pack offer after existing commitments.",
+                    })
+                    emit(current, "NEGOTIATION_NO_FEASIBLE_OFFER",
+                         {"donor": move["donor"], "recipient": move["recipient"],
+                          "quantity": move["quantity"],
+                          "reason": "No whole-pack offer satisfies both hospitals and existing commitments."},
+                         [move["donor"], move["recipient"]], run_id, id)
+                    continue
+                planned = next_planned
+                pending_ids.append(id)
+                move = {**move, "quantity": n["quantity"], "lines": n["lines"],
+                        "after": n["after"], "remaining_unmet": n["remaining_unmet"]}
+                feasible_moves.append(move)
                 n["messages"] = [
                     {
                         "actor": move["recipient"],
@@ -152,6 +184,13 @@ def run_job(store, job):
                         type="consumption check",
                         text=f"Our own history-based planning forecast can consume these {move['quantity']} units before expiry without increasing waste. This is an expiry-rescue proposal, not a claim of shortage. Administrator approval is required.",
                     )
+                n["messages"].append({
+                    "actor": n["recipient"], "type": "joint feasibility review",
+                    "at": now(), "quantity": n["quantity"],
+                    "text": f"We evaluated the offered {n['negotiation_check']['offered_quantity']} units against both hospitals' forecasts, existing transfers and other offers. "
+                            f"The feasible agreement is {n['quantity']} units in whole packs. Donor reserves remain protected and the recipient can use every offered unit before expiry. Both administrators must now approve.",
+                    "mode": "deterministic forecast and safety checks",
+                })
                 current["negotiations"][id] = n
                 emit(
                     current,
@@ -161,6 +200,8 @@ def run_job(store, job):
                     run_id,
                     id,
                 )
+            if not unchanged:
+                current["allocations"][run_id]["moves"] = feasible_moves
             current["settings"]["demo"]["latest_run"] = run_id
             job.update(status="completed", completed_at=now())
     store.update_job(job)
