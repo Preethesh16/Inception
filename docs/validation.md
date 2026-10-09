@@ -1,31 +1,74 @@
 # Validation record
 
-Measured in this workspace on 2026-10-08.
+## Current integration: 9 October 2026
 
-- **46 backend tests passed**: rubric arithmetic, FEFO expiry, fractional arrival timing, missing-data handling, no future leakage, anomaly clustering, competing recipients, donor protection, no-donor escalation, role scope, CSV atomicity, counteroffer caps, approval versioning, duplicate receipts, concurrent reservation, cancellation, expiry cleanup, structured OpenAI tool-loop mock, and forced inference request.
-- **Browser transfer acceptance passed** on both ports: report, rejected over-limit counteroffer, buyer approval, donor approval, courier claim/pickup/transit/receipt, balanced ledger, dataset download, outcome replay.
-- **390 px mobile check passed** after correcting action-button wrapping; no page-level horizontal overflow.
-- **Production frontend build passed**, with chart/map/workflow code split into separate chunks.
-- **Python static unused-name/import checks passed**.
-- **Alembic initial schema migration passed** against the local demo database.
-- **Fresh Chronos smoke test passed**: 18 series, model `chronos-2`, `source=live`, one regional incident, eight open feasible proposals, balanced ledger. Full fresh inference and historical validation took **12.33 seconds** with model weights already downloaded.
+Implementation reference: [`17ad6f4`](https://github.com/Preethesh16/Inception/commit/17ad6f4731ade526c4901c391e784ed020746145).
 
-Model revision: `29ec3766d36d6f73f0696f85560a422f50e8498c1`.
+| Check | Result and scope |
+| --- | --- |
+| Backend | **80 tests passed** in the final full run. Covers API scope, atomic imports, chronological forecasting, uncertainty, FEFO, donor/recipient checks, concurrent approvals, idempotent movements and resets. |
+| Browser | **18 distinct acceptance checks passed across the initial run and focused reruns.** Includes landing sections, login, upload validation, usage/expiry views, agreements, mobile layout and the full transfer journey. This was not one uninterrupted green run. |
+| Build | TypeScript and Vite production build passed. Vite reports a large Three.js chunk; this does not fail compilation. |
+| Live assistant | Explicit OpenAI query returned an answer with eight source references and no fallback error. |
+| Real forecasting | The browser acceptance backend ran Chronos-2 on CPU. Final focused agreement/transfer checks used explicitly disabled OpenAI automatic briefings, with labelled deterministic explanations; the live assistant was checked separately. |
 
-Independent synthetic seeds 2027 and 2028 selected Chronos-2 over both baselines. Raw held-out MAE was 7.415 and 6.707 units respectively. Incident-adjusted WAPE was 10.71% and 9.72%. Anomaly precision was 91.67% and recall 84.62% on both test seeds, with two-day detection delays in the evaluated incidents. Full counts, horizons, interval coverage, shortage metrics and model-selection results are in `evaluation-reference.json`.
+The integration exposed an API mismatch: the new network-status view still read a removed delivery-based risk field. The fix uses current stockout, stress and uncertainty-review fields. Regression tests cover risk levels without exposing another hospital's private inventory. Browser checks were also aligned with the current landing content and login animation.
 
-These tests are small synthetic scenarios, not clinical validation or evidence of generalisation to real hospital demand.
+The complete browser journey verifies CSV upload, stock reductions, reports at two nearby hospitals, donor rerouting, an over-limit counteroffer, approvals by both hospitals, simulated receipt, exact stock changes and ledger reconciliation.
 
-## External-service verification
+### Additional earlier live checks on 9 October
 
-- Live OpenAI negotiation and scoped inventory/policy tool calls passed in an isolated database using the configured key. See `docs/live-agent-validation.md` and the local `artifacts/live-agent-test.json`. No live credentials are used by ordinary unit tests.
-- CARTO tile service rendering was not exercised because no tile API key was configured. The labelled geographic fallback was exercised. Automated browser tests deliberately block public map tiles; online OpenStreetMap tile rendering is not claimed by those tests.
-- Courier movement is an intentional simulation; no real dispatch or hospital-system integration is attempted.
+Before the latest UI integration, the full 15-check browser suite passed in 4.3 minutes, alongside 77 backend tests. Separate live checks verified browser SSE connectivity, scoped events, rejection of a partially invalid CSV without partial writes, duplicate stock movements applying once, and cross-hospital movement rejection. These are historical checks for the preceding interface, not additional tests in the current count.
 
-## Three-hospital acceptance (current interface)
+## Evidence boundaries
 
-The browser journey verifies single-file Kaveri onboarding, stock edits, a nearby Chamundi offer, reports at both adjacent hospitals, donor rerouting to Mandya, rejected over-limit counteroffer, two hospital approvals, courier receipt, automatic progression through the five-stage console, a rider simulation, exact donor/recipient stock changes and a balanced ledger. Backend tests additionally cover atomic bundle rejection, scoped login and knowledge, expiry-change idempotency and refusing edits to reserved stock.
+- Test hospitals, consumption and courier actions are synthetic. Passing software tests does not establish real-world forecast accuracy or clinical effectiveness.
+- Browser acceptance blocks public map tiles and exercises the labelled geographic fallback. It does not establish CARTO or OpenStreetMap tile availability.
+- The committed `evaluation-reference.json` is an older synthetic evaluation artifact. Its historical model-selection metrics do not describe the current Chronos-only policy, and its scores should not be presented as fresh measurements.
+- Current pinned Chronos revision: `29ec3766d36d6f73f0696f85560a422f50e8498c`. An older validation note included an extra trailing character; the current configuration is authoritative.
+- No hosted CI run or coverage percentage is claimed here. Results were recorded locally.
 
-## Forecast-gated redistribution and scoped console
+## Reproduce the checks
 
-Seven browser tests pass: the complete three-hospital transfer, mobile layout, expiry edits, and controlled-hospital scoping across all three products, and forced refresh with unchanged demand / changed stock followed by conditional stage advancement, plus empty approval inbox, hospital-specific approval login links, and removing an import while its console is open. The removal test verifies that products, forecasts and stages disappear and partner forecasts remain available. Backend coverage proves stale jobs cannot restore a removed hospital and the CSV can be imported again. The new browser run uses a disposable backend (`E2E_API_TARGET`) with baseline forecasting so it cannot reset the running demonstration. The live backend was separately checked before the five-stage UI change: all nine series used Chronos-2; the forecasting implementation is unchanged. The production frontend build passes. Backend coverage includes no search for adequate stock, no expiry search when a batch is needed locally, forecast-supported expiry rescue without a recipient shortage, rejection when recipient demand is absent, and persisted per-hospital search/skipped events.
+From the repository root:
+
+```bash
+make test
+make build
+```
+
+For browser acceptance, keep `make dev` running for the two frontend ports. Run a separate API and **one** worker against a disposable directory. Commands below assume port 8013 is free.
+
+Terminal 2, repository root:
+
+```bash
+INCEPTION_DATA_DIR="$PWD/data/e2e" \
+INCEPTION_FORECAST=chronos \
+OPENAI_API_KEY='' \
+PYTHONPATH=backend \
+.venv/bin/python -m uvicorn inception.api:app --host 127.0.0.1 --port 8013
+```
+
+Terminal 3, repository root, using the same data directory:
+
+```bash
+INCEPTION_DATA_DIR="$PWD/data/e2e" \
+INCEPTION_FORECAST=chronos \
+OPENAI_API_KEY='' \
+PYTHONPATH=backend \
+.venv/bin/python -m inception.worker
+```
+
+Terminal 4:
+
+```bash
+cd frontend
+npx playwright install chromium
+E2E_API_TARGET=http://127.0.0.1:8013 npm run test:e2e
+```
+
+The explicit empty OpenAI key isolates acceptance tests from paid-service latency. Chronos remains real. Omitting that override enables configured live OpenAI calls, which can materially increase test duration. The active demo's database is preserved because browser and test API requests are routed to the disposable backend.
+
+Stop the disposable API and worker after testing. The disposable `data/e2e` directory is ignored by Git and contains generated demo state and caches.
+
+For opt-in live agent checks, see [agent knowledge](agent-knowledge.md). For separate synthetic forecasting evaluation, run `make evaluate` and inspect the generated artifact rather than quoting archived scores as current results.

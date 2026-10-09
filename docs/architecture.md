@@ -40,8 +40,8 @@ Repeated analysis requests for the same generation and revision coalesce. Jobs h
 
 - The allocator is a deterministic feasible heuristic, not a global optimisation claim.
 - Donor protection and recipient consumption use forecast assumptions, not guaranteed future patient outcomes.
-- The six-facility instance keeps recalculation simple; an expanded deployment needs more efficient optimisation and a multi-tenant relational model.
-- All agent actions are scoped by the server actor. Initial negotiation is deterministic; OpenAI tool calls are optional and on demand. Approvals remain explicit UI operations.
+- The three-hospital demo and six-facility evaluation network keep recalculation simple; an expanded deployment needs more efficient optimisation and a multi-tenant relational model.
+- All agent actions are scoped by the server actor. Initial negotiation is deterministic; OpenAI tool calls optionally provide automatic proposal briefings and on-demand explanations or constrained counteroffers. Approvals remain explicit UI operations.
 - The local role selector is intentionally permissive to demonstrate both sides. Production authentication and access provisioning are separate work.
 - Outbreak intensity is a discrete facility-centred overlay, not an epidemiological spread model.
 - Historical reconciliation and the live demonstration ledger have separate opening balances, documented in the generator and movement reasons.

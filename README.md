@@ -1,158 +1,306 @@
-# Inception
+<div align="center">
 
-**Medical supply intelligence: know before the shortage.**
+# inception.
 
-A working local prototype for the Singularity medical-supply track. Two interfaces share a single transactional inventory ledger:
+### Know before the shortage. Share before the waste.
 
-- **Hospital workspace:** http://localhost:5173 — inventory, forecasts, outbreak reports, recommendations, approvals and deliveries.
-- **Workflow console:** http://localhost:5174 — regional map, actual execution events, negotiation, evidence and outcome replay.
+**Inventory intelligence for hospital networks — from consumption history to an auditable transfer.**
 
-The current demonstration uses three fictional hospitals around Mysuru, three supplies, 237 historical days at onboarding and a separate future evaluation stream. The original six-facility synthetic generator remains available for evaluation. All data and courier actions are synthetic. Reports and consumption anomalies indicate suspected incidents, not clinically confirmed outbreaks.
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
+![Forecasting with Chronos-2](https://img.shields.io/badge/Forecasting-Chronos--2-176B5B?style=flat-square)
+![Local prototype](https://img.shields.io/badge/Status-Local_prototype-D89B35?style=flat-square)
 
-## Run
+[Quick start](#quick-start) · [Product tour](#product-tour) · [How it works](#how-it-works) · [Forecasting](#forecasting-that-explains-its-limits) · [Validation](#validation) · [Documentation](#documentation)
 
-Requirements: Python 3.12 via `uv`, Node 20+, npm, approximately 2 GB of dependency/model storage. The first model download needs internet access.
+</div>
 
-```sh
+![Inception landing page with its three-dimensional hospital network and Pip guide](docs/images/hero.png)
+
+A hospital can have enough stock today and still run short next week. Another can have the same medicine sitting unused until expiry. **Inception connects those two decisions:** forecast consumption, simulate each batch, find a useful transfer, and require both hospitals to approve it.
+
+Built for the Singularity medical-supply track, this working local prototype uses **Amazon Chronos-2**, inventory-aware simulation, and scoped hospital agents. It needs consumption and inventory records; **patient records are not forecast inputs**.
+
+| Demo network | Forecast horizon | Human control | Traceability |
+| :--- | :--- | :--- | :--- |
+| 3 fictional hospitals · 3 supplies | 28 days per hospital and supply | 2 approvals on the same terms | Batch movements, events and reconciliation |
+
+## Product tour
+
+**One ledger. Two perspectives.** Hospital staff work with their own stock and approvals. The workflow console exposes the calculations, partner search and transfer lifecycle.
+
+### Hospital workspace · inventory with context
+
+Expiry filters, searchable batches, reservations and contextual guidance turn a stock list into an actionable view. Near expiry does not automatically mean surplus: expected consumption determines what may go unused.
+
+![Hospital inventory workspace showing expiry watch, batch quantities and contextual guidance](docs/images/inventory.png)
+
+<details>
+<summary><strong>Explore three more views: consumption, forecasting and agreements</strong></summary>
+
+**Understand consumption.** Inspect historical usage by supply before interpreting the forecast.
+
+![Interactive hospital usage explorer with product-level consumption history](docs/images/usage.png)
+
+**Follow the decision.** The dark workflow console shows demand, uncertainty, candidate hospitals and the reason a partner is eligible or excluded.
+
+![Workflow console showing Chronos-2 demand, simulated shortage exposure and geographic partner search](docs/images/workflow.png)
+
+**Approve explicit terms.** A transfer agreement names the supplying and receiving hospitals, quantities, batches, expiry dates and the explanation behind the proposal.
+
+![Transfer agreements with batch details, decision explanations and separate hospital approval controls](docs/images/transfer-agreement.png)
+
+</details>
+
+*Actual application captures using synthetic demo data, recorded 9 October 2026. Screenshots show different test states; quantities are examples, not fixed recommendations. Agent fallback and unavailable map tiles remain labelled. [Screenshot provenance](docs/images/README.md).*
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Upload hospital CSV] --> B[Validate and import atomically]
+    B --> C[Chronos-2 demand forecast]
+    C --> D[Simulate batches and uncertainty]
+    D --> E{Actionable inventory need?}
+    E -->|Shortage| F[Find an eligible donor]
+    E -->|Unused expiry or surplus| G[Find a useful recipient]
+    E -->|Uncertain exposure| H[Flag risk review]
+    E -->|No action needed| I[Continue monitoring]
+    F --> J[Constrained proposal and explanation]
+    G --> J
+    J --> K[Both hospitals approve the same version]
+    K --> L[Reserve stock]
+    L --> M[Simulate pickup and receipt]
+    M --> N[Reconcile inventory and audit trail]
+```
+
+1. **Import once.** One CSV carries hospital identity, supply definitions, batches and daily consumption. Invalid imports roll back together.
+2. **Forecast consumption.** Chronos-2 predicts demand; reported requirements and observed surges can raise the planning path.
+3. **Evaluate consequences.** First-expiry-first simulation estimates shortage timing and waste under multiple demand paths.
+4. **Find a useful match.** Whole-pack offers must satisfy donor protection, recipient consumption, shelf life, storage and unit constraints.
+5. **Keep people in control.** Both administrators approve the same proposal version. Pickup and receipt update the shared ledger through explicit simulated actions.
+
+**Fresh imports establish the baseline.** In the three-hospital demo, inventory edits or demand reports start the actionable workflow. An empty approval inbox after upload is intentional.
+
+## Forecasting that explains its limits
+
+The operational model is **[Amazon Chronos-2](https://huggingface.co/amazon/chronos-2)**, running on CPU through PyTorch. The CSV supplies inference context; the application does not fine-tune the neural network.
+
+| Method | What it does here |
+| :--- | :--- |
+| **180-day context → 28-day horizon** | Produces daily P10, P50 and P90 estimates for each hospital–supply series. |
+| **Consumption + weekday** | Uses inventory history and known calendar information. Legacy clinical columns are optional and excluded from model inputs. |
+| **Causal imputation** | Estimates missing or stockout-constrained observations from earlier history and flags them. Missing days are not silently treated as zero demand. |
+| **Rolling-origin backtesting** | Predicts historical future blocks from earlier inputs; reports MAE, WAPE, quantile loss, interval coverage and width. Two simple baselines provide comparisons. |
+| **Empirical interval widening** | Uses completed historical error paths to widen daily uncertainty bounds when past errors warrant it. |
+| **Median/MAD + CUSUM** | Flags unusual consumption and persistent underprediction. Persistence and corroboration rules reduce isolated-spike alerts. |
+| **Whole-path Monte Carlo** | Resamples historical 28-day error sequences 1,000 times with a reproducible seed. Duplicate selections are combined into weighted paths. |
+| **Surge scenarios** | Applies reported requirements and observed-surge planning floors; separately evaluates 1.5× and 2× demand stress paths. |
+
+**1,000 draws do not mean 1,000 model calls.** Chronos produces the forecast; resampling explores historical ways that forecast might be wrong. The demo commonly has 21 overlapping error paths, spanning roughly six non-overlapping windows. More draws do not create more historical evidence.
+
+The resulting shortage frequencies are **conditional simulation estimates**. They are not clinically validated probabilities. Summing daily P90 values does not yield a calibrated P90 for total demand, and inventory history alone cannot reliably predict an unseen disease outbreak.
+
+Chronos remains selected in normal operation. If loading or inference fails, the analysis job fails visibly. `INCEPTION_FORECAST=baseline` is an explicit offline development mode; baselines never silently replace Chronos.
+
+## Inventory rules that make the forecast useful
+
+- **Protect the donor:** retain a fixed 28-day higher-demand planning requirement plus a normal-day unit buffer. Supplier delivery delay does not determine this horizon.
+- **Check likelihood and severity:** additional provisional limits use at most 5% simulated shortage frequency and half a pack of expected unmet demand. These are engineering policy settings, not research-proven optimal thresholds.
+- **Respect every batch:** simulate expiry, reservations, quarantine, confirmed arrivals and incoming transfers using fractional-day FEFO consumption.
+- **Make transfers useful:** require compatible units/storage, whole packs and recipient consumption without increasing expected expiry waste.
+- **Handle expiry carefully:** a hospital can face expiry now and shortage later. The expiry-rescue exception releases stock only when every evaluated path would otherwise waste those units and donor unmet demand does not increase.
+- **Recheck at approval:** changed terms clear earlier approvals; current stock and safety constraints are validated again before reservation.
+- **Preserve stock accounting:** repeated commands cannot double-apply a movement; concurrent approvals cannot double-reserve a batch.
+
+The authoritative thresholds live in [`config.py`](backend/inception/config.py), with enforcement in [`engine.py`](backend/inception/engine.py) and [`transactions.py`](backend/inception/transactions.py).
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph UI[React 19 interfaces]
+        H[Hospital workspace :5173]
+        W[Workflow console :5174]
+    end
+    H --> API[FastAPI: validation, scope and commands]
+    W --> API
+    API <--> DB[(SQLite WAL: inventory, jobs and events)]
+    DB --> Worker[Background Python worker]
+    Worker --> Model[Chronos-2 / PyTorch CPU]
+    Model --> Risk[Error paths, FEFO and constrained allocation]
+    Risk --> DB
+    API --> Agent[Optional OpenAI Responses agent]
+    Agent --> Tools[Scoped evidence and validated counteroffer tools]
+    Tools --> DB
+    Agent --> Knowledge[Versioned OKF policy documents]
+    DB --> Stream[SSE events and snapshot refresh]
+    Stream --> UI
+```
+
+Forecast computation runs outside database write transactions. The worker commits only if its inventory revision and demo generation are still current, so an old job cannot overwrite a reset or newer edit. SQLite uses short transactions and a single forecast worker.
+
+The agent explains evidence and can propose bounded counteroffers through server-validated tools. **It cannot approve a transfer or move stock.** Numerical policy enforcement stays in Python.
+
+| Layer | Technology | Why it is here |
+| :--- | :--- | :--- |
+| Interfaces | React 19, TypeScript, Vite | Interactive hospital views and a separate workflow console sharing typed data. |
+| Data and visuals | TanStack Query, Recharts, Leaflet | Snapshot refresh, forecast charts and geographic partner context. |
+| Product scenes | Three.js, React Three Fiber | Interactive hospital scenes and Pip’s contextual guidance. |
+| API | FastAPI, Pydantic | Validated commands, scoped responses and inspectable OpenAPI documentation. |
+| Forecasting | Chronos-2, PyTorch, pandas, NumPy | CPU inference, time-series preparation and empirical uncertainty calculations. |
+| Persistence | SQLite WAL, SQLAlchemy, Alembic | Transactional inventory records, durable jobs and schema management. |
+| Agent explanations | OpenAI Responses API, OKF documents | Optional tool-based explanations backed by current hospital evidence and policy. |
+| Verification | pytest, Playwright, TypeScript build | Domain invariants, browser journeys and compile-time checks. |
+
+## Quick start
+
+**Prerequisites:** Python 3.12 via `uv`, Node.js 20+, npm and `make`. Allow approximately 2 GB for dependencies/model storage; the first model download needs internet access.
+
+```bash
+git clone https://github.com/Preethesh16/Inception.git
+cd Inception
 make setup
 make setup-forecast
 cp .env.example .env
 make dev
 ```
 
-The launcher starts FastAPI, the separate CPU worker, and the two Vite frontends. It prefers backend port 8000 but automatically chooses the next available port and configures both frontend proxies. The terminal prints the actual API documentation URL.
+Skip the clone when already inside the repository. Keep an existing `.env` rather than overwriting it.
 
-The application generates its data and queues its first analysis automatically. `Ctrl+C` shuts down the child processes. Restarting retains the ledger. Use **Done — reset demo** in the console to restore all three hospitals to their original CSV inventory amounts and expiry dates, clear reports/approvals/transfers, and refresh forecasts. Hospital A logout remains the separate way to return A to an empty CSV-onboarding demo.
+| Service | Local address |
+| :--- | :--- |
+| Hospital workspace | http://localhost:5173 |
+| Workflow console | http://localhost:5174 |
+| API documentation | Printed by the launcher: `/docs` on port 8000 or the next free port |
 
-Logging out of Hospital A clears its CSV import, inventory, usage history, forecasts, outbreak reports, and active workflow. Its open console becomes empty until the next CSV upload. Hospital B and D logouts preserve their data. A's prior transfer records are archived locally; pending reservations are released, and partner stock stays at its current quantity. This is a demo reset, including for unfinished simulated deliveries, not a production shipment-cancellation workflow.
+`make dev` launches the API, **one CPU worker** and both interfaces. `Ctrl+C` stops them; restarting preserves the ledger.
 
-For exact Python dependency reproduction after creating the virtual environment:
+<details>
+<summary><strong>Configuration, dependency reproduction and external services</strong></summary>
 
-```sh
+The checked-in [`.env.example`](.env.example) documents configuration. Keep secrets in `.env`, which is ignored by Git.
+
+| Variable | Purpose |
+| :--- | :--- |
+| `INCEPTION_FORECAST=chronos` | Default operational forecasting mode. |
+| `CHRONOS_MODEL` / `CHRONOS_REVISION` | Pinned model and revision; no paid model API key is required. |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Optional live agent explanations and constrained counteroffer responses. |
+| `VITE_CARTO_KEY` | Optional CARTO map tiles. |
+| `INCEPTION_DATA_DIR` | Alternate data directory, useful for isolated tests. |
+| `INCEPTION_API_PORT` | Preferred API port; the launcher chooses the next available port. |
+
+Without an OpenAI key, explanations are labelled **deterministic fallback**. Without CARTO, maps use OpenStreetMap tiles; unavailable tiles produce a labelled geographic schematic. Browser tests deliberately block public tiles. See the [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
+
+For the committed Python dependency snapshot, after creating the virtual environment:
+
+```bash
 uv pip sync requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
 ```
 
-The two indexes are PyPI and the official PyTorch CPU wheel repository. The lock uses CPU-only PyTorch. npm dependencies are pinned in `frontend/package-lock.json`.
+The indexes are PyPI and the official PyTorch CPU wheel repository. Frontend dependencies are pinned in `frontend/package-lock.json`.
 
-### Optional credentials
+</details>
 
-Edit `.env`, then restart:
+## Try the complete demo
 
-```dotenv
-OPENAI_API_KEY=your_key
-OPENAI_MODEL=gpt-4.1-mini
-VITE_CARTO_KEY=your_key
-```
+All accounts below use **`Demo@2026`**. They represent fictional hospitals and local demo roles.
 
-Without OpenAI credentials the assistant clearly reports **deterministic fallback** and explains current computed evidence. With a key it uses OpenAI Responses, strict function schemas and a structured decision response. The API key stays on the backend.
+| Hospital | Email | Starting role |
+| :--- | :--- | :--- |
+| A · Kaveri General | `admin@kaveri.demo` | Upload the [A-hospital CSV](demo-data/three-hospital/A-hospital.csv). |
+| B · Chamundi Community | `admin@chamundi.demo` | Preloaded nearby partner. |
+| D · Mandya Regional | `admin@mandya.demo` | Preloaded partner outside the nearby planning zone. |
 
-Without a CARTO key, the map uses OpenStreetMap tiles with attribution and normal browser caching, following the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). With a key, CARTO Positron is used. If tiles are unavailable, a labelled geographic schematic retains markers, planning zones and connections. Browser tests block public tiles and verify this fallback.
+1. **Onboard A:** upload the supplied CSV and wait for analysis. It contains 237 days of history for ORS, saline and masks.
+2. **Create a shortage:** set `A-ORS-01` and `A-ORS-02` to **10 units each** in Inventory management. Save and reassess.
+3. **Inspect the workflow:** select Kaveri and ORS in the console, then click **Refresh workflow**. Stock coverage changes even when historical demand is unchanged.
+4. **Exercise surge planning:** report **140 additional ORS units over seven days** at A, then at nearby B. Inspect the changed planning zone and donor eligibility; D can become the supplying hospital when its checks pass.
+5. **Review and approve:** test a counteroffer above the displayed cap, then approve valid terms from both participating hospitals.
+6. **Finish the transfer:** simulate delivery and verify exact stock changes and **Ledger balanced**.
 
-`INCEPTION_FORECAST=baseline` deliberately disables Chronos for fast development. The default, `chronos`, loads the verified pinned `amazon/chronos-2` revision on CPU. Baselines are benchmarks only. Model-loading or inference failure fails the analysis job rather than silently switching models. `auto` remains an alias for Chronos-only operation. Results may be cached; their original compute time and input hash remain visible. **Run live analysis** explicitly bypasses the cache so judges can observe a fresh inference. Report-only updates reuse unchanged raw forecasts and recalculate the planning adjustment.
+The scenario begins on **5 October 2026**. Interpret expiry dates against that scenario clock, not the computer’s date. Offer quantities are computed, not hard-coded.
 
-## Demonstrate the current three-hospital journey
+**Reset deliberately:** **Done — reset demo** restores all three hospitals and clears the workflow. Logging out of A clears its import and the demo reports; B/D stock is retained. These are demonstration controls. [Full walkthrough and reset semantics →](docs/demo-walkthrough.md)
 
-Follow [the presenter walkthrough](docs/demo-walkthrough.md). Kaveri starts with empty inventory; upload [its single CSV](demo-data/three-hospital/A-hospital.csv). Chamundi (nearby) and Mandya (outside the planning zone) are preloaded using the same importer. All local demonstration accounts use `Demo@2026`.
+### CSV contract
 
-Change quantities and expiry dates in **Inventory management**, report affected supplies and explicit additional outbreak requirements, then select the product and press **Refresh workflow** in the console. Its five stages show actual forecast calculations, mapped partner search, agent messages, dual approvals, and a rider simulation backed by transfer events. Hospital navigation has four tabs: Onboarding, Past usage, Inventory management, and Approvals. No approval card is displayed without a stored proposal. Stock reductions affect projected coverage without falsely changing the consumption history.
+The single-file importer dispatches rows by `record_type`. Required inventory history is sufficient; no patient details are needed.
 
-## What is implemented
+| Record type | Contents |
+| :--- | :--- |
+| `profile` | Hospital identity and location. |
+| `supply` | Supply identifier, unit, pack size and storage. |
+| `batch` | Lot, on-hand quantity and expiry. |
+| `consumption` | Dated consumption with completeness/censoring flags. |
+| `replenishment` | Optional confirmed/scheduled stock arrivals. |
 
-### Forecasting and evidence
+Use the supplied [three-hospital datasets](demo-data/three-hospital/) and [dataset documentation](docs/dataset.md) as the import reference. The upload interface accepts **CSV**; native `.xlsx` import is not claimed.
 
-- Real Chronos-2 CPU inference for 9 onboarded facility–supply series in the three-hospital demo (18 in the original evaluation network): context 180, horizon 28, batch 8, daily P10/P50/P90.
-- Inventory consumption and weekday only; clinical profile fields are not forecast inputs and are optional in legacy CSVs.
-- Causal seasonal imputation of missing or stock-out-censored observations.
-- Weekly rolling historical origins, with 7/28-day MAE, WAPE, quantile loss, empirical interval coverage and width. The latest 28-day block is evaluated using only error paths completed before that block. Chronos remains the operational model.
-- Horizon-specific empirical interval widening and reproducible whole-path residual bootstrap (1,000 draws). Missing/censored test paths are excluded. Overlapping origins are labelled and non-overlapping window counts are shown; simulated probabilities are not validated guarantees.
-- Forecast-error CUSUM supplements median/MAD detection. Explicit 1.5x/2x stress paths have no assigned outbreak probability.
-- A seven-day surge planning floor, separately plotted from the raw forecast. Overlapping reported requirements and observed surges are not added twice.
-- Robust median/MAD anomaly detection, persistence checks, nearby-facility corroboration, scoped incident reports with correction/withdrawal APIs and 72-scenario-hour expiry.
-- Fixed-seed synthetic generator; historical ledger export is separately reconciled from the live demo opening snapshot. The artificial stock reset between these two datasets is explicit.
+## Validation
 
-### Inventory and redistribution
+**Recorded local verification: 9 October 2026, implementation commit `17ad6f4`.** These are dated results, not a hosted CI status.
 
-- Fractional-day FEFO simulation handles expiry, confirmed arrivals, reservations and incoming transfers.
-- Whole-pack allocation by urgency tier, coverage and unmet inventory demand; no patient-load ranking.
-- Donor protection over a fixed 28-day inventory horizon plus a normal-day unit reserve, independent of supplier lead time. Additional empirical limits default to 5% shortage frequency and half a pack of expected unmet demand; these are configurable engineering policy choices, not clinically validated thresholds.
-- Explicit long-life surplus search and expiry-rescue search. Surplus is a candidate amount, not permission to transfer. Expiry rescue may coexist with a later shortage only when every evaluated path would otherwise waste the offered units and donor unmet demand never increases.
-- Recipient expected expiry waste must not increase across the empirical paths; existing FEFO consumption, pack and dual-approval checks remain enforced.
-- Automatic donors are outside the active planning zone and have no projected shortage within the evaluated horizon; the latter is a conservative extra safeguard against circular borrowing, with the strict no-harm expiry-rescue exception described above.
-- A `risk_review` decision flags empirical shortage exposure when the central forecast is covered. It does not convert unvalidated simulation frequencies into an automatic purchase quantity.
-- Recipient batch-consumption checks, unit and storage matching, quarantine exclusions, and a two-day residual-life requirement.
-- Each proposal shows the effect of **that proposal alone**, not the sum of unrelated unapproved recommendations.
-- Symmetric simulated travel times derived from straight-line distance, a road factor and handling time. Dashed map lines are transfer connections, not navigation routes.
+| Check | Recorded result |
+| :--- | :--- |
+| Backend suite | **80 passed** — forecasting, expiry, access scope, import rollback, approval versioning and inventory conservation. |
+| Browser coverage | **18 distinct checks passed across reruns** — upload, dashboards, workflow, agreements, login/logout and responsive layouts. |
+| Production frontend build | Passed TypeScript and Vite compilation. |
+| Live assistant | OpenAI response with evidence references; no fallback in the explicit integration check. |
 
-### Agents and transactions
+The final focused agreement/transfer checks used **real Chronos-2 with deterministic automatic briefings** to isolate UI behaviour from external-service latency. A live assistant call was checked separately. The integration run found and fixed a dashboard risk-field mismatch. [Detailed validation record →](docs/validation.md)
 
-- Initial requests/counteroffers are generated by the deterministic policy negotiator and labelled accordingly. Each involved hospital automatically receives a scoped briefing on new proposals. OpenAI supplies these briefings when configured, plus on-demand explanations and user-requested constrained counteroffers through validated tools. Automatic agents may submit a bounded counteroffer through server-validated tools, but cannot approve, move stock or start recursive analysis jobs.
-- Three rounds per proposal, repeated-request deduplication, exact-term approvals, and fresh proposal records after reanalysis.
-- Two distinct hospital approvals atomically reserve batches. Concurrent or repeated approvals cannot duplicate a reservation.
-- Dispatch decrements donor stock; receipt credits recipient stock. Duplicate pickup and receipt commands are idempotent.
-- Cancellation before pickup releases reservations. Uncollected reservations expire after 30 wall-clock minutes; open offers expire after 24 hours. In-transit stock is never automatically credited.
-- Append-only movement/event records, SQLite WAL, short `BEGIN IMMEDIATE` transactions, optimistic analysis revisions and generation checks after reset.
-- Durable jobs with a 30-minute lease, refreshed at inference milestones; a single worker can recover abandoned jobs.
-- SSE live events with event IDs and reconnect recovery, plus periodic snapshot refresh.
+```bash
+make test              # backend tests; no paid API credentials
+make build             # TypeScript + production frontend build
+make types             # regenerate the OpenAPI contract and request types
+make evaluate          # separate synthetic evaluation, not a clinical benchmark
 
-### Knowledge
-
-`knowledge/` is a small OKF v0.2 bundle. It contains policy explanations, metric definitions and an incident playbook. Live quantities and approvals stay in the database. The backend’s executable policy configuration is authoritative. No vector database is required for four relevant documents.
-
-## Verify
-
-```sh
-make test
-make build
-make types
-make evaluate
+# With make dev running, in another terminal:
 cd frontend
 npx playwright install chromium
 npm run test:e2e
 ```
 
-The browser tests expect `make dev` to be running. They **reset and modify the local synthetic demo**, perform the complete cross-hospital transfer, download evidence and check mobile overflow.
+**Browser tests reset and mutate demo data.** Point `E2E_API_TARGET` at a separately launched API and worker using their own `INCEPTION_DATA_DIR` to preserve an active demonstration. See [validation instructions](docs/validation.md#reproduce-the-checks).
 
-`make evaluate` runs independent synthetic seeds 2027 and 2028. Its artifact includes forecast errors, daily interval coverage, shortage-alert precision/recall and lead times, anomaly precision/recall and delays. It is visible in the console and included in the evaluation export.
+## Repository map
 
-- Backend tests: `backend/tests/`
-- Browser journey: `frontend/tests/demo.spec.ts`
-- Generated OpenAPI contract: `artifacts/openapi.json`
-- Generated request types: `frontend/src/lib/generated-api.d.ts`
-- Evaluation and screenshots: `artifacts/`
+```text
+backend/inception/
+  api.py              # requests, scope, imports and event streaming
+  forecast.py         # Chronos inference, historical checks and cache
+  uncertainty.py      # residual paths, CUSUM and weighted risk metrics
+  engine.py           # FEFO simulation, protection and allocation
+  redistribution.py   # shortage, surplus, expiry and review decisions
+  transactions.py     # versioned approvals, reservations and movements
+  worker.py           # durable analysis jobs and stale-result protection
+frontend/src/
+  TrioApp.tsx         # hospital workspace and workflow console
+  components/         # forecasts, inventory, agreements, maps and scenes
+  lib/                # API client and shared types
+backend/tests/        # domain and API regression coverage
+frontend/tests/       # browser acceptance journeys
+knowledge/            # versioned OKF policies and playbooks
+demo-data/            # synthetic CSV inputs
+docs/                 # architecture, datasets, validation and walkthrough
+```
 
-Daily P90 values form a stress path; their sum is **not** a calibrated 90% total-demand bound. Synthetic results establish reproducibility and software behaviour, not performance on real hospitals.
+## Scope and next steps
 
-## API and persistence
+This is a **local, synthetic hospital-inventory prototype**. It demonstrates forecasting and software behaviour; it does not establish clinical effectiveness or accuracy on real hospital demand. Operational zones are reported/anomaly-based planning overlays, and courier actions are simulated.
 
-Open the printed `/docs` URL for typed API requests. Demo sessions use the `X-Demo-Session` header (`demo-A` through `demo-F`, or `demo-judge`). Browser downloads and SSE use the equivalent query token. These are intentionally selectable **local demonstration roles**, not production authentication.
+Production adoption would require authenticated tenant isolation, real inventory integrations, prospective forecasting validation, monitored policy calibration and operational deployment work. The allocator is a constrained heuristic; global network optimality is not claimed.
 
-The SQLite database contains separate versioned record tables for facilities, supplies, batches, movements, replenishments, reports, forecasts, negotiations, transfers, runs, incidents, allocations and settings, plus dedicated jobs and events tables. Payloads are JSON within the per-domain tables for prototype flexibility. Alembic’s initial migration creates the schema idempotently.
+## Documentation
 
-The forecast worker reads only `history_at(cutoff)`. Evaluation reads the future data through a separate path. The worker computes outside write transactions and commits only if its scenario generation and inventory revision are still current.
+- [Presenter walkthrough](docs/demo-walkthrough.md) — exact actions and demo reset behaviour.
+- [Architecture and invariants](docs/architecture.md) — transactions, concurrency and design trade-offs.
+- [Datasets and import format](docs/dataset.md) — records, history and synthetic opening balances.
+- [Agents and knowledge](docs/agent-knowledge.md) — scoped tools, provenance and live checks.
+- [Validation record](docs/validation.md) — what was tested and what the evidence supports.
+- [Historical synthetic evaluation](docs/evaluation-reference.json) — archived measurements, not current-model guarantees.
 
-No EHR connectivity, public deployment, production identity provider, real disease feed, payment system or live courier integration is implied. No code has been pushed automatically to GitHub.
+### Working on Inception
 
-## Current implementation and limits
-
-The three-hospital flow supersedes the earlier two-hospital and scenario-button presentation. [Single-file datasets](demo-data/three-hospital/) and [the walkthrough](docs/demo-walkthrough.md) are the current demo reference.
-
-Demand forecasts refresh every five minutes and after data changes. Cache provenance remains visible. Unchanged refreshes preserve current approvals. Hospital facts from the CSV enter source-linked knowledge; numerical policy enforcement remains in typed code.
-
-No additional paid service is required for the deterministic local demonstration. Live OpenAI calls and CARTO tile rendering need their optional keys and external verification. This is a local hackathon prototype: production authentication, real hospital feeds, real courier dispatch and public deployment remain outside its scope.
-
-### Search triggers and console scope
-
-Search is forecast-gated per facility and supply. Pack-sized unmet demand triggers donor search; genuinely unused expiring stock triggers recipient search, preserving protected donor demand and requiring recipient consumption before expiry. No actionable risk means no search. Partner agents use their own imported history and forecast evidence. The console selects one controlled hospital and shows each of its products separately.
-
-
-### Agent knowledge and live tests
-
-See [hospital agents and OKF knowledge](docs/agent-knowledge.md) for retrieval, per-hospital/product scoping, policy provenance and the opt-in live API test. `make test` does not use paid API credentials.
-
-### Forecast-aware counteroffers and outbreak reset
-
-The recipient's `evaluate_received_offer` agent tool simulates its own stock, reservations, confirmed arrivals, transit and batch expiry against the current planning forecast. A 200-unit offer is not automatically treated as a 200-unit need. Counteroffers are reduced to useful whole packs; zero useful packs reject the proposal. The negotiation conversation exposes the forecast calculation, expiry and per-batch consumption. A dashboard counteroffer triggers one bounded OpenAI response; deterministic validation works even without the key. Numerical evidence is scoped to the recipient and judge console.
-
-Hospital A logout also clears all outbreak reports in the three-hospital demo, including B's report, so the next onboarding starts without an old outbreak circle. Other hospital logouts clear their own reports while retaining inventory. Report snapshots are archived, old forecasts are invalidated and a new analysis is queued.
-
-Run `.venv/bin/python scripts/test_outbreak_negotiation.py --live` for an isolated real Chronos/OpenAI test: nearby B is selected first, two reports redirect the search to Mandya (internal ID D, the third hospital), an expiring 200-unit offer is evaluated and countered, and logout clears both reports. It writes `artifacts/outbreak-negotiation-live.json` and never changes the active demo database.
+For a useful issue, include the scenario date, hospital/supply, exact edit or CSV, expected result and observed result. Exclude credentials and real patient information. Changes to stock or forecasting logic should preserve the [operational invariants](docs/architecture.md#critical-invariants) and include a focused regression test. UI changes should pass the build and relevant browser journey.
